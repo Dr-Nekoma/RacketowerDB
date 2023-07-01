@@ -1,0 +1,6 @@
+#+TITLE: Racket Tower DB 🎾 🏰
+
+* About
+This is a toy database :)
+
+Do not use it professionally (it's always good to warn).
