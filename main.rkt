@@ -6,6 +6,7 @@
 (require racket/base)
 (require racket/class)
 (require racket/serialize)
+(require threading)
 
 (define serializable<%>
   (interface () serialize deserialize))
@@ -42,14 +43,14 @@
 
 (define field%
   (class object%
-    (field (position null)
-           (type null))
+    (init-field [position null]
+                [type null])
     (super-new)))
 
 (define table%
   (class entity%
-    (field (row-id null)
-           (fields (make-hash (list))))
+    (init-field [row-id null]
+                [fields (make-hash (list))])
     (super-new)))
 
 (define procedure%
@@ -58,12 +59,35 @@
 
 (define (convert-literal table attribute-name literal)
   (let ((attribute (hash-ref (get-field fields table)
-                             attribute-name
-                             (lambda () #f))))
-    (cond
-      ((and attribute
-            (is-a? literal string%)) (list (get-field position attribute)
-                                           ())))))
+                             attribute-name)))
+    `(,(get-field position attribute) . ,(send literal serialize))))
+
+(define (convert-row table row)
+  (~>
+   (foldl (lambda (elem acc)
+            (cons (convert-literal table (car elem) (cdr elem))
+                  acc))
+          '() row)
+   (sort _ (lambda (a b) (< (car a) (car b))))
+   (map cdr _)))
+
+;;;; Recipe
+;; Get the entity and check if it is a table
+;; Convert the row
+;; Calculate the offset with row-id => row-id*(sum_of_all_types_in_fields_hash)
+;; Note: Add padding to strings with less than type size and truncate bigger ones, preferably raising a warning
+(define (write-row-to-disk (schema table-name row))
+  (let ((entity (hash-ref )))))
+
+(let* ((field-name (new field% [position 1]
+                        [type 'VARCHAR30]))
+       (field-editor (new field% [position 0]
+                          [type 'VARCHAR30]))
+       (table (new table% [fields (make-hash `(("NAME" . ,field-name)
+                                               ("EDITOR" . ,field-editor)))])))
+  ;; (println (convert-literal table "NAME" (new string% [value "I love potatoes"])))
+  (println (convert-row table `(("NAME" . ,(new string% [value "Nathan"]))
+                                ("EDITOR" . ,(new string% [value "Visual Studio Code"]))))))
 
 ;; (deserialize (serialize '('VARCHAR . 123)))
 
