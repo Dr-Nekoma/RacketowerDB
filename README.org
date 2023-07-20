@@ -4,3 +4,18 @@
 This is a toy database :)
 
 Do not use it professionally (it's always good to warn).
+
+* RoadMap
+
+** RacketowerDB 1.0
+ - [] Write the logical schema onto disk
+ - [] Reads of tables and schemas
+ - [] Server
+ - [] Keys
+ - [] Query Language
+ - [] Internal tooling for searches
+** RacketowerDB 2.0
+ - [] Procedures
+ - [] Transactions
+ - [] Cascading
+
