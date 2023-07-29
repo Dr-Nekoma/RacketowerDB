@@ -2,7 +2,7 @@
 
 (module writer racket
   (require racket/base)
-  (require "ast.rkt")
+  (require (submod "ast.rkt" entities))
   (require threading)
   (provide write-row-to-disk)
     

@@ -4,7 +4,8 @@
 
 (require racket/base)
 (require (submod "io.rkt" writer))
-(require "ast.rkt")
+(require (submod "ast.rkt" types))
+(require (submod "ast.rkt" entities))
 
 (let* ((field-name (new field% [position 1]
                         [type (new type% [name 'VARCHAR]
