@@ -4,15 +4,16 @@
 
 (require racket/base)
 (require (submod "io.rkt" writer))
-(require (submod "ast.rkt" types))
+(require (submod "io.rkt" reader))
+(require "ast.rkt")
 (require (submod "ast.rkt" entities))
 
 (let* ((field-name (new field% [position 1]
-                        [type (new type% [name 'VARCHAR]
-                                         [size 30])]))
+                               [type (new type% [name 'VARCHAR]
+                                                [byte-size 30])]))
        (field-editor (new field% [position 0]
-                          [type (new type% [name 'VARCHAR]
-                                           [size 30])]))
+                                 [type (new type% [name 'VARCHAR]
+                                                  [byte-size 30])]))
        (table (new table% [fields (make-hash `(("NAME" . ,field-name)
                                                ("EDITOR" . ,field-editor)))]))
        (schema (make-hash `(("PROGRAMMER" . ,table))))
@@ -20,4 +21,4 @@
               ("EDITOR" . ,(new string% [value "Visual Studio Code"]))))
        (literal1 (new string% [value "potatoes"]))
        (literal2 (new integer32% [value 32])))
-  (println (write-row-to-disk schema "PROGRAMMER" row)))
+  (display (read-table-from-disk schema "PROGRAMMER")))

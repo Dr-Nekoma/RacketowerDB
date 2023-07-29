@@ -18,7 +18,7 @@
     in
     {
       devShells.default = pkgs.mkShell {
-        packages = with pkgs; [ racket ];
+        packages = with pkgs; [ racket just ];
       };
     });
 }
