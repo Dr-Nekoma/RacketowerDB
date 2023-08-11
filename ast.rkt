@@ -2,11 +2,11 @@
 
 (require racket/class)
 (require racket/base)
+(require racket/serialize)
 
 (provide type%)
-(require racket/serialize)
 (provide string%)
-(provide integer32%)  
+(provide integer32%)
 
 (define serializable<%>
   (interface () serialize deserialize))
@@ -15,7 +15,7 @@
   (interface () from-bytes to-byte-size))
 
 (define type%
-  (class* object% (bytable<%>)
+  (class* object% (bytable<%> serializable<%>)
     (init-field [name null]
                 [byte-size null])
     (define/public (from-bytes byte-stream)
@@ -28,6 +28,8 @@
             (raise 'error-with-from-bytes-size-check))))
     (define/public (to-byte-size)
       byte-size)
+    (define/public (serialize) this)
+    (define/public (deserialize byte-stream) this)
       (super-new)))
 
 (define literal%
@@ -36,7 +38,7 @@
     (define/public (custom-print port _)
       (print value port))
     (define/public (custom-write port)
-     (write value port))
+      (write value port))
     (define/public (custom-display port)
       (display value port))
     (super-new)))
@@ -49,28 +51,28 @@
         (if (< size-of-type size-of-string)
             (string->bytes/utf-8 (substring value 0 size-of-type)) ;; Truncate
             (let ((dest-bytes (make-bytes size-of-type 0))
-                  (serialized-string (string->bytes/utf-8 value)))
-              (bytes-copy! dest-bytes 0 serialized-string)
+                  (serialyzed-string (string->bytes/utf-8 value)))
+              (bytes-copy! dest-bytes 0 serialyzed-string)
               dest-bytes)))) ;; Padding
-    ;; TODO: assign the value to the result of this later
     (define/public (deserialize byte-array)
-      (bytes->string/utf-8 byte-array))
+      (set-field! value this (string-trim (bytes->string/utf-8 byte-array))))
     (inherit-field value)
     (super-new)))
 
 (define integer32%
   (class* literal% (serializable<%>)
-    (define/public (serialize _)
+    (define/public (serialize)
       (integer->integer-bytes (get-field value this) 4 #t))
     (define/public (deserialize byte-array)
-      (integer-bytes->integer byte-array #t))
+      (set-field! value this (integer-bytes->integer byte-array #t)))
+    (inherit-field value)
     (super-new)))
 
 (module+ entities
   (provide table%)
   (provide procedure%)
   (provide field%)
-
+  
   (define entity%
     (class* object% (serializable<%>)
       (define/public (serialize)
@@ -78,25 +80,27 @@
       (define/public (deserialize byte-array)
         (deserialize byte-array))
       (super-new)))
-
+  
   (define field%
-    (class object%
+    (class* object% (serializable<%>)
       (init-field [position null]
                   [type null])
+      (define/public (serialize) this)
+      (define/public (deserialize byte-array) this)
       (super-new)))
 
-  (define table%
-    (class entity%
-      (define/public (fields-size)
-        (let* ((fields-values (hash-values fields)))
-          (foldl (lambda (elem acc)
-                   (let ((size (get-field byte-size (get-field type elem))))
-                     (+ acc size)))
-                 0 fields-values)))
-      (init-field [row-id 0]
-                  [fields (make-hash (list))])
-      (super-new)))
+    (define table%
+      (class entity%
+        (define/public (fields-size)
+          (let* ((fields-values (hash-values fields)))
+            (foldl (lambda (elem acc)
+                     (let ((size (get-field byte-size (get-field type elem))))
+                       (+ acc size)))
+                   0 fields-values)))
+        (init-field [row-id 0]
+                    [fields (make-hash (list))])
+        (super-new)))
 
-  (define procedure%
-    (class entity%
-      (super-new))))
+    (define procedure%
+      (class entity%
+        (super-new))))

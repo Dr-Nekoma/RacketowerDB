@@ -2,10 +2,11 @@
 
 (require racket/base)
 (require threading)
-(require (submod "ast.rkt" entities))
+(require racket/serialize)
+(require (submod RacketowerDB/ast entities))
 
 (module+ writer
-  (require "util.rkt")
+  (require RacketowerDB/util)
   (provide write-row-to-disk)
     
   (define (convert-literal table attribute-name literal)
@@ -24,6 +25,16 @@
      (map cdr _)
      (bytes-join _ #"")))
 
+  
+  (define (update-row-id-table schema table-name id)
+    (let ((entity (hash-ref schema table-name)))
+      (cond
+        [(is-a? entity table%)
+         (hash-set! schema table-name id)]
+        [(is-a? entity procedure%)
+         (raise 'tried-update-row-id-with-procedure)])
+      schema))
+
   (define (write-row-to-disk schema table-name row)
     (let ((entity (hash-ref schema table-name)))
       (cond
@@ -34,20 +45,24 @@
                 (off-set (* row-id total-size))
                 (file-name (build-ndf-filename table-name))
                 (out (open-output-file file-name #:exists 'replace)))
+           (update-row-id-table schema table-name (+ row-id 1)) ;; Update row-id
+           ;;() Jump with off-set 
            (write-bytes converted-row out)
            (close-output-port out))]
-        [(is-a? entity procedure%) (println "Don't write procedures yet")]))))
+        [(is-a? entity procedure%) (println "Don't write procedures yet")])
+      schema)))
 
 (module+ reader
   (require "util.rkt")
+  ;; (require (submod "ast.rkt" entities))
   (provide read-table-from-disk)
 
   (define (read-table-from-disk schema table-name)
     (let* ((file-name (build-ndf-filename table-name))
            (in (open-input-file file-name #:mode 'binary)))
-      (deserialize-table schema table-name (port->bytes in))))
+      (deserialize-table-fields schema table-name (port->bytes in))))
   
-  (define (deserialize-table schema table-name byte-stream)
+  (define (deserialize-table-fields schema table-name byte-stream)
     (let ((entity (hash-ref schema table-name)))
       (cond
         [(is-a? entity table%)
