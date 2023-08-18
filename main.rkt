@@ -16,23 +16,29 @@
   (require (submod RacketowerDB/io writer))
   (require (submod RacketowerDB/io reader))
   (require RacketowerDB/ast)
- 
-  (require (submod RacketowerDB/ast entities))
   
   (let* ((field-name (new field% [position 1]
                           [type (new type% [name 'VARCHAR]
-                                     [byte-size 30])]))
+                                     [byte-size 5])]))
          (field-editor (new field% [position 0]
                             [type (new type% [name 'VARCHAR]
-                                       [byte-size 30])]))
+                                       [byte-size 5])]))
          (table (new table% [fields (make-hash `(("NAME" . ,field-name)
                                                  ("EDITOR" . ,field-editor)))]))
-         (schema (make-hash `(("PROGRAMMER" . ,table))))
-         (row `(("NAME" . ,(new string% [value "Nathan"]))
-                ("EDITOR" . ,(new string% [value "Visual Studio Code"]))))
+         (schema (make-hash (list)))
+         (row1 `(("NAME" . ,(new string% [value "Nathan"]))
+                 ("EDITOR" . ,(new string% [value "Visual Studio Code"]))))
+         (row2 `(("NAME" . ,(new string% [value "Lemos"]))
+                 ("EDITOR" . ,(new string% [value "Emacs"]))))
          (literal1 (new string% [value "potatoes"]))
-         (literal2 (new integer32% [value 32])))
-    (display (read-table-from-disk schema "PROGRAMMER"))))
+         (literal2 (new integer32% [value 32]))
+         ;; (read-table (read-table-from-disk schema "PROGRAMMER"))
+         )
+    (write-table-to-disk table "PROGRAMMER") ;; Writing entity Table | NOT DATA YOU DUMB IDIOT
+    (let ((read-table (read-table-from-disk schema "PROGRAMMER")))
+      (hash-set! schema "PROGRAMMER" read-table)
+      (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))      
+      )))
 
   ;; (require racket/cmdline)
   ;; (define who (box "world"))
