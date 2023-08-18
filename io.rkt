@@ -59,7 +59,7 @@
                 (row-id (get-field row-id entity))
                 (total-size (send entity fields-size))
                 (off-set (* row-id total-size))
-                (file-name (build-ndf-filename table-name #:data? #t))
+                (file-name (build-ndf-filename table-name #:data? 'data))
                 (out (open-output-file file-name #:exists 'can-update)))
            (file-position out off-set)
            (write-bytes converted-row out)

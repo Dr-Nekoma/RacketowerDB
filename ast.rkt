@@ -12,6 +12,8 @@
 (provide string%)
 (provide integer32%)
 (require RacketowerDB/util)
+(require (submod RacketowerDB/util interfaces))
+(require (submod RacketowerDB/util classes))
 
 (define type%
   (class* object% (bytable<%> serializable<%>)
@@ -80,7 +82,7 @@
     (super-new)))
 
 (define entity%
-  (class* object% (serializable<%>)
+  (class* hashable% (serializable<%>)
     (abstract serialize)
     (abstract deserialize)    
     (super-new)))
