@@ -82,7 +82,7 @@
     (super-new)))
 
 (define entity%
-  (class* hashable% (serializable<%>)
+  (class* object% (serializable<%>)
     (abstract serialize)
     (abstract deserialize)    
     (super-new)))

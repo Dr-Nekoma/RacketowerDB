@@ -15,6 +15,7 @@
   (require racket/class)
   (require (submod RacketowerDB/io writer))
   (require (submod RacketowerDB/io reader))
+  (require (submod RacketowerDB/language lex))
   (require RacketowerDB/ast)
   
   (let* ((field-name (new field% [position 1]
@@ -38,7 +39,9 @@
     (let ((read-table (read-table-from-disk schema "PROGRAMMER")))
       (hash-set! schema "PROGRAMMER" read-table)
       (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))      
-      )))
+      ))
+
+  (println (tokenizer mappings)))
 
   ;; (require racket/cmdline)
   ;; (define who (box "world"))

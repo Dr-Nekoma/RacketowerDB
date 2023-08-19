@@ -7,13 +7,11 @@
 
 (define build-ndf-filename
   (lambda (#:data? [data? 'entity] name)
-    (let ((path (cond
-                  [(is-a? data? 'entity)
-                   "ndf/entities/"]
-                  [(is-a? data? 'schema)
-                   ("ndf/schemas/")]
-                  [(is-a? data? 'data)
-                    "ndf/data/"])))
+    (let ((path (case (list 'quote data?)
+		  [('entity) "ndf/entities/"]
+		  [('schema) "ndf/schemas/"]
+		  [('data) "ndf/data/"]
+		  [else (raise 'error-not-specified-datatype)])))
       (string-append path (string-append name ".ndf")))))
 
 (module interfaces racket
