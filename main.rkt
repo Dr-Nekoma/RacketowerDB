@@ -16,6 +16,8 @@
   (require (submod RacketowerDB/io writer))
   (require (submod RacketowerDB/io reader))
   (require (submod RacketowerDB/language lex))
+  (require (submod RacketowerDB/language parser))
+  
   (require RacketowerDB/ast)
   
   ;; (let* ((field-name (new field% [position 1]
@@ -41,7 +43,8 @@
   ;;     (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))      
   ;;     ))
 
-  (println (tokenizer mappings)))
+  (define sample-input "CREATE"); (Name STRING(10)) END")
+  (println (parse (λ () (mappings (open-input-string sample-input))))))
 
   ;; (require racket/cmdline)
   ;; (define who (box "world"))
