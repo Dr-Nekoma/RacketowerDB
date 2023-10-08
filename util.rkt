@@ -2,8 +2,41 @@
 
 (require racket/base)
 (require threading)
+(require br/cond)
 
 (provide build-ndf-filename)
+(provide entity-classes)
+(provide define-serializable)
+(provide fix-empty-read-bytes-lines)
+
+
+(require syntax/parse/define
+         (for-syntax racket/syntax))
+
+;; (define-syntax-parse-rule (create name) 
+;;   #:with name-string (datum->syntax #f #'name)
+;;   (define name-string 2))
+
+(define (fix-empty-read-bytes-lines lines)
+  (define (fix-one-turn inner-lines)
+    (let ((newline-flag #f))
+      (foldl (lambda (line new-lines)
+               (if newline-flag
+                   (begin
+                     (begin
+                       (set! newline-flag #f)
+                       new-lines)
+                     (append new-lines (list (bytes-append #"\n" line))))
+                   (if (bytes=? #"" line)
+                       (begin
+                         (set! newline-flag #t)
+                         new-lines)
+                       (append new-lines (list line))))) (list) inner-lines)))
+  (define (stop-condition lines-to-check) (empty? (filter (lambda (line) (bytes=? #"" line)) lines-to-check)))
+  (while (not (stop-condition lines))
+    (set! lines (fix-one-turn lines)))
+  lines)
+
 
 (define build-ndf-filename
   (lambda (#:data? [data? 'entity] name)
@@ -13,6 +46,13 @@
 		  [('data) "ndf/data/"]
 		  [else (raise 'error-not-specified-datatype)])))
       (string-append path (string-append name ".ndf")))))
+
+(define entity-classes (make-hash (list)))
+
+(define-syntax-parse-rule (define-serializable name body ...)
+    (begin
+        (define name body ...)
+        (hash-set! entity-classes (symbol->string 'name) name)))
 
 (module interfaces racket
   (provide serializable<%>)
@@ -60,3 +100,4 @@
               named-values-list)
          (bytes-join _ #"")))
       (super-new))))
+
