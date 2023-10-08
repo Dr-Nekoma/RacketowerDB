@@ -15,14 +15,14 @@
 (require (submod RacketowerDB/util interfaces))
 (require (submod RacketowerDB/util classes))
 
-(define type%
-  (class* object% (bytable<%> serializable<%>)
+(define-serializable type%
+  [class* object% (bytable<%> serializable<%>)
     (init-field [name null]
                 [byte-size null])
     (define/public (from-bytes byte-stream)
       (let ((received-bytes-size (bytes-length byte-stream)))
         (if (eq? received-bytes-size byte-size)
-            (case (list 'quote name)
+            (case (list 'quote (string->symbol name))
               [('INTEGER) (new integer32% [value (integer-bytes->integer byte-stream #t)])]
               [('VARCHAR) (new string% [value (bytes->string/utf-8 byte-stream)])]
               [else (raise 'error-with-unknown-type-from-bytes)])
@@ -41,7 +41,7 @@
         (set-field! name this name-value)
         (set-field! byte-size this byte-size-value)
         (+ 5 name-length)))
-      (super-new)))
+      (super-new)])
 
 (define literal%
   (class* object% (printable<%>)
@@ -73,7 +73,7 @@
 
 (define integer32%
   (class* literal% (serializable<%>)
-    (define/public (serialize)
+    (define/public (serialize _)
       (integer->integer-bytes value 4 #t))
     (define/public (deserialize byte-array)
       (set-field! value this (integer-bytes->integer (subbytes byte-array 0 4) #t))
@@ -81,13 +81,7 @@
     (inherit-field value)
     (super-new)))
 
-(define entity%
-  (class* object% (serializable<%>)
-    (abstract serialize)
-    (abstract deserialize)    
-    (super-new)))
-
-(define field%
+(define-serializable field%
   (class hashable%
     (init-field [position null]
                 [type null])
@@ -105,10 +99,8 @@
         (+ 1 type-consumed)))
     (super-new)))
 
-;; (eval `(append accumulator ,@(cons name new-field))))))) We will test this asap when we manage to make it work normie way
-
-(define table%
-  (class entity%
+(define-serializable table%
+  (class hashable%
     (define/public (fields-size)
       (let* ((fields-values (hash-values fields)))
         (foldl (lambda (elem acc)
@@ -116,6 +108,7 @@
                    (+ acc size)))
                0 fields-values)))
     (init-field [row-id 0]
+                [identifier "table%"]
                 [fields (make-hash (list))])
     (define/override (serialize)
       (let* ((row-id-bytes (integer->integer-bytes row-id 4 #t))
@@ -127,9 +120,16 @@
              (new-field (make-object field%))
              (fields-value (make-hash (send new-field deserialize-hash-list (subbytes byte-array 4) '()))))
         (set-field! row-id this row-id-value)
-        (set-field! fields this fields-value)))
+        (set-field! fields this fields-value)
+        (bytes-length byte-array)))
     (super-new)))
   
-  (define procedure%
-    (class object%
+  (define-serializable procedure%
+    (class hashable%
+      (init-field [identifier "procedure%"])
+      (define/override (serialize)
+        (string->bytes/utf-8 "procedures' serialization is not yet implemented"))
+      (define/override (deserialize byte-array)
+        (println "procedures' deserialization is not yet implemented")
+        (bytes-length byte-array))
       (super-new)))

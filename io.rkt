@@ -9,6 +9,7 @@
   (require RacketowerDB/util)
   (provide write-rows-to-disk)
   (provide write-table-to-disk)
+  (provide write-schema-to-disk)
   
   (define (convert-literal table attribute-name literal)
     (let* ((attribute (hash-ref (get-field fields table)
@@ -51,6 +52,23 @@
                (new-schema (write-row-to-disk schema table-name first-row)))
           (write-rows-to-disk new-schema table-name (rest rows)))))
 
+  (define (write-schema-to-disk schema)
+    (define (write-entity-to-disk file-out entities-list)
+      (let* ((entity-name (get-field identifier (cdr (car entities-list))))
+             (serialized-name (string->bytes/utf-8 entity-name))
+             (new-entity (make-object (hash-ref entity-classes entity-name))))        
+        (write-string entity-name file-out)
+        (newline file-out)
+        (write-bytes (send new-entity serialize-hash-list entities-list) file-out)
+        (newline file-out)
+        ))
+    (let* ((schema-list (hash->list schema))
+           (file-name (build-ndf-filename "schema"  #:data? 'schema))
+           (out (open-output-file file-name #:exists 'can-update)))
+      (~>> (group-by (lambda (x) (get-field identifier (cdr x))) schema-list)
+           (map (curry write-entity-to-disk out)))
+      (close-output-port out)))
+  
   (define (write-row-to-disk schema table-name row)
     (let ((entity (hash-ref schema table-name)))
       (cond
@@ -72,7 +90,27 @@
 (module+ reader
   (require RacketowerDB/util)
   (require RacketowerDB/ast)
+  (require racket/hash)
+  (provide read-schema-from-disk)
   (provide read-table-from-disk)
+  (provide read-table-values-from-disk)
+
+  (define (read-schema-from-disk schema-name)
+    (let* ((file-name (build-ndf-filename schema-name  #:data? 'schema))
+           (in (open-input-file file-name #:mode 'binary))
+           (schema (make-immutable-hash (list)))
+           (read-lines (fix-empty-read-bytes-lines (port->bytes-lines in)))
+           (builder-class null))
+      (for/list ([i (length read-lines)])
+        (if (even? i)
+            (set! builder-class (hash-ref entity-classes (bytes->string/utf-8 (list-ref read-lines i))))
+            (set! schema (hash-union schema (make-immutable-hash
+                                             (send
+                                              (make-object builder-class)
+                                              deserialize-hash-list
+                                              (list-ref read-lines i)
+                                              '()))))))
+      (make-hash (hash->list schema))))
 
   (define (read-table-from-disk schema table-name)
     (let* ((file-name (build-ndf-filename table-name))
