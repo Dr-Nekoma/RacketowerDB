@@ -18,7 +18,17 @@
     in
     {
       devShells.default = pkgs.mkShell {
-        packages = with pkgs; [ racket just ];
+        packages = with pkgs; [ 
+          just
+
+          # Backend and Query Language
+          racket 
+          
+          # Frontends
+          emacs
+          clojure
+          dotnet-sdk 
+        ];
       };
     });
 }
