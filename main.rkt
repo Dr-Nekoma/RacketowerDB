@@ -21,14 +21,19 @@
   
   (require RacketowerDB/ast)
   
-  (let* ((field-name (new field% [position 1]
+  (let* ((field-name (new field% [position 0]
                           [type (new type% [name 'VARCHAR]
                                      [byte-size 5])]))
-         (field-editor (new field% [position 0]
+         (field-editor (new field% [position 1]
                             [type (new type% [name 'VARCHAR]
                                        [byte-size 5])]))
+         (field-year (new field% [position 0]
+                          [type (new type% [name 'INTEGER]
+                                     [byte-size 4])]))
          (table (new table% [fields (make-hash `(("NAME" . ,field-name)
                                                  ("EDITOR" . ,field-editor)))]))
+         (car-table (new table% [fields (make-hash `(("MODEL" . ,field-name)
+                                                     ("YEAR" . ,field-year)))]))
          (procedure (new procedure%))
          (schema (make-hash (list)))
          (row1 `(("NAME" . ,(new string% [value "Nathan"]))
@@ -41,16 +46,15 @@
                  ("YEAR" . ,(new integer32% [value 2013]))))
          (literal1 (new string% [value "potatoes"]))
          (literal2 (new integer32% [value 32]))
-         (read-table (read-table-from-disk schema "PROGRAMMER"))
          )
-    (println (get-field byte-size (get-field type (hash-ref (get-field fields read-table) "EDITOR"))))
     (hash-set! schema "TEST" procedure)
     (hash-set! schema "PROGRAMMER" table)
+    (hash-set! schema "CAR" car-table)
     (write-schema-to-disk schema)
     (set! schema (read-schema-from-disk "schema"))
-    (println (get-field byte-size (get-field type (hash-ref (get-field fields (hash-ref schema "PROGRAMMER")) "NAME"))))
-    (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
-    (println (read-table-values-from-disk schema "PROGRAMMER"))
+    ;; (println (get-field byte-size (get-field type (hash-ref (get-field fields (hash-ref schema "CAR")) "MODEL"))))
+    ;; (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
+    ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
     ;; (define sample-input (open-input-string "CREATE RELATION CAR (MODEL STRING(5) YEAR INTEGER)"))
     ;; (port-count-lines! sample-input)
     ;; (write-table-to-disk table "PROGRAMMER")

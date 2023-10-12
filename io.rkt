@@ -101,6 +101,7 @@
            (schema (make-immutable-hash (list)))
            (read-lines (fix-empty-read-bytes-lines (port->bytes-lines in)))
            (builder-class null))
+      (println read-lines)
       (for/list ([i (length read-lines)])
         (if (even? i)
             (set! builder-class (hash-ref entity-classes (bytes->string/utf-8 (list-ref read-lines i))))
@@ -112,7 +113,7 @@
                                               '()))))))
       (make-hash (hash->list schema))))
 
-  (define (read-table-from-disk schema table-name)
+  (define (read-table-from-disk table-name)
     (let* ((file-name (build-ndf-filename table-name))
            (in (open-input-file file-name #:mode 'binary))
            (table (new table%)))
