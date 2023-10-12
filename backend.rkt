@@ -2,13 +2,13 @@
 
 (require racket/tcp)
 
-(module+ server
+(module+ server  
   (define default-port 8891)
   
   (define (server)
     (tcp-listen default-port))
 
-  (define (server-entrypoint)
+  (define (server-socket)
     (define listener (server))
     (define (loop)
         (define-values (in out) (tcp-accept listener))
@@ -21,5 +21,5 @@
         (loop))
     (loop))
   
-  (provide server-entrypoint)
+  (provide server-socket)
   (provide default-port))
