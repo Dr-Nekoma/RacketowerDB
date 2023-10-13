@@ -1,25 +1,28 @@
-on: [push, pull_request]
-name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
 jobs:
   build:
-    name: "Build on Racket '${{ matrix.racket-version }}' (${{ matrix.racket-variant }})"
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
-      fail-fast: false
       matrix:
-        racket-version: ["stable", "current"]
-        racket-variant: ["BC", "CS"]
-        include:
-          - racket-version: current
-            experimental: true
+        racket-variant: ["CS"]
+        racket-version: ["stable"]
+    name: Build on ${{ matrix.racket-variant }} Racket
     steps:
-      - uses: actions/checkout@v2
-      - uses: Bogdanp/setup-racket@v1.7
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install Racket
+        uses: Bogdanp/setup-racket@v1.10
         with:
-          architecture: x64
-          distribution: full
+          architecture: 'x64'
+          distribution: 'full'
           variant: ${{ matrix.racket-variant }}
           version: ${{ matrix.racket-version }}
-      - name: Checking compilation
+      - name: Install Package and its Dependencies
+        run: raco pkg install --auto --batch
+      - name: Check compilation
         run: raco exe --gui main.rkt
