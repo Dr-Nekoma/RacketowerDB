@@ -103,7 +103,7 @@
      (let* ((row-id (table-row-id self))
             (row-id-bytes (integer->integer-bytes row-id 4 #t))
             (fields-list (hash->list (table-fields self))))
-       (bytes-append row-id-bytes (serialize-hash-list fields-list) #"\n")))
+       (bytes-append row-id-bytes (serialize-hash-list fields-list #f))))
    (define (deserialize self byte-stream)
      (let* ((row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
             (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '()))))
@@ -116,7 +116,7 @@
      (procedure-identifier self))]
   #:methods gen:serializable
   [(define (serialize _self #:size [_size #f])
-     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented") #"\n"))
+     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented")))
    {define (deserialize _self byte-stream)
      (println "procedures' deserialization is not yet implemented")
      (values (procedure "procedure") (bytes-length byte-stream))}])

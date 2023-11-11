@@ -20,7 +20,7 @@
            (type (fyeld-type attribute))
            (type-size (type-byte-size type))
            (position (fyeld-position attribute)))
-      (cons position (serialize literal type-size))))
+      (cons position (serialize literal #:size type-size))))
   
   (define (convert-row table row)
     (~>
@@ -31,43 +31,6 @@
      (map cdr _)
      (bytes-join _ #"")))
 
-  (define (update-row-id-table schema table-name id)
-    (let ((entity (hash-ref schema table-name)))
-      (cond
-        [(table? entity)
-         (begin
-           (hash-set! schema table-name (table-row-id-set table id))
-           schema)]
-        [(procedura? entity)
-         (raise 'tried-update-row-id-with-procedure)])))
-
-  (define (write-table-to-disk table table-name)
-    (let* ((serialized-table (serialize table))
-           (file-name (build-ndf-filename table-name))
-           (out (open-output-file file-name #:exists 'can-update)))
-      (write-bytes serialized-table out)
-      (close-output-port out)))
-  
-  (define (write-rows-to-disk schema table-name rows)
-    (if (empty? rows)
-        schema
-        (let* ((first-row (first rows))
-               (new-schema (write-row-to-disk schema table-name first-row)))
-          (write-rows-to-disk new-schema table-name (rest rows)))))
-
-  (define (write-schema-to-disk schema)
-    (define (write-entity-to-disk file-out entities-list)
-      (let* ((entity-name (give-identifier (cdr (car entities-list)))))
-        (write-string entity-name file-out)
-        (newline file-out)
-        (write-bytes (serialize-hash-list entities-list) file-out))) ;; Maybe the math is wrong because of this
-    (let* ((schema-list (hash->list schema))
-           (file-name (build-ndf-filename "schema"  #:data? 'schema))
-           (out (open-output-file file-name #:exists 'can-update)))
-      (~>> (group-by (lambda (x) (give-identifier (cdr x))) schema-list)
-           (map (curry write-entity-to-disk out)))
-      (close-output-port out)))
-  
   (define (write-row-to-disk schema table-name row)
     (let ((entity (hash-ref schema table-name)))
       (cond
@@ -84,16 +47,55 @@
            (set! schema (update-row-id-table schema table-name (+ row-id 1))))]
         [(procedura? entity)
          (println "Don't write procedures yet")])
-      schema)))
+      schema))
+  
+  (define (write-rows-to-disk schema table-name rows)
+    (if (empty? rows)
+        schema
+        (let* ((first-row (first rows))
+               (new-schema (write-row-to-disk schema table-name first-row)))
+          (write-rows-to-disk new-schema table-name (rest rows)))))
+
+  (define (update-row-id-table schema table-name id)
+    (let ((entity (hash-ref schema table-name)))
+      (cond
+        [(table? entity)
+         (begin
+           (hash-set! schema table-name (table-row-id-set entity id))
+           schema)]
+        [(procedura? entity)
+         (raise 'tried-update-row-id-with-procedure)])))
+
+  (define (write-table-to-disk table table-name)
+    (let* ((serialized-table (serialize table))
+           (file-name (build-ndf-filename table-name))
+           (out (open-output-file file-name #:exists 'truncate)))
+      (write-bytes serialized-table out)
+      (close-output-port out)))
+  
+  (define (write-schema-to-disk schema)
+    (define (write-entity-to-disk file-out entities-list)
+      (let* ((entity-name (give-identifier (cdr (car entities-list)))))
+        (write-string entity-name file-out)
+        (newline file-out)
+        (write-bytes (serialize-hash-list entities-list #t) file-out)
+        (newline file-out)))
+    (let* ((schema-list (hash->list schema))
+           (file-name (build-ndf-filename "schema" #:data? 'schema))
+           (out (open-output-file file-name #:exists 'truncate)))
+      (~>> (group-by (lambda (x) (give-identifier (cdr x))) schema-list)
+           (map (curry write-entity-to-disk out)))
+      (close-output-port out))))
 
 (module+ reader
   (require RacketowerDB/util)
+  (require (submod RacketowerDB/util interfaces))
   (require (submod RacketowerDB/util hashable))
   (require RacketowerDB/ast)
   (require racket/hash)
   (provide read-schema-from-disk)
   (provide read-table-from-disk)
-  ;; (provide read-table-values-from-disk)
+  (provide read-table-values-from-disk)
 
   (define (read-schema-from-disk schema-name)
     (define (build-hash-from-line struct-instance line-in-bytes)
@@ -123,46 +125,46 @@
           make-hash)))
 
   (define (read-table-from-disk table-name)
-    (let* ((file-name (build-ndf-filename table-name))
+    (let* ((file-name (build-ndf-filename #:data? 'entity table-name))
            (in (open-input-file file-name #:mode 'binary)))
       (define-values (table table-consumed) (deserialize struct:table (port->bytes in)))
-      table)))
+      table))
 
-  ;; (define (read-table-values-from-disk schema table-name)
-  ;;   (let* ((file-name (build-ndf-filename #:data? 'data table-name))
-  ;;          (in (open-input-file file-name #:mode 'binary))
-  ;;          (byte-stream (port->bytes in))
-  ;;          (entity (hash-ref schema table-name)))
-  ;;     (cond
-  ;;       [(is-a? entity table%)
-  ;;        (define (create-pair key-field) (cons (car key-field) (get-field type (cdr key-field))))
-  ;;        (define (sort-by-position key-field1 key-field2)
-  ;;          (let ((p1 (get-field position (cdr key-field1)))
-  ;;                (p2 (get-field position (cdr key-field2))))
-  ;;            (< p1 p2)))
-  ;;        (define (reconstruct-literal-data accumulator fields sub-byte-stream)
-  ;;          (let* ((first-elem (first fields))
-  ;;                 (name (car first-elem))
-  ;;                 (type (cdr first-elem))
-  ;;                 (size (get-field byte-size type))
-  ;;                 (new-literal (send type from-bytes (subbytes sub-byte-stream 0 size)))
-  ;;                 (return (append (list (cons name new-literal)) accumulator))
-  ;;                 (rest-fields (rest fields))
-  ;;                 (remaining-bytes (subbytes sub-byte-stream size (bytes-length sub-byte-stream))))
-  ;;            (if (empty? rest-fields)
-  ;;                (cons return remaining-bytes)
-  ;;                (reconstruct-literal-data return rest-fields remaining-bytes))))
-  ;;        (define (reconstruct-all-literals accumulator fields inner-byte-stream)            
-  ;;          (let* ((one-line (reconstruct-literal-data (list) fields inner-byte-stream))
-  ;;                 (computed-line (list (car one-line)))
-  ;;                 (remaining-bytes (cdr one-line))
-  ;;                 (return (append accumulator computed-line)))
-  ;;            (if (bytes=? #"" remaining-bytes)
-  ;;                return
-  ;;                (reconstruct-all-literals return fields remaining-bytes))))
-  ;;        (~>
-  ;;         (hash->list (get-field fields entity))
-  ;;         (sort _ sort-by-position)
-  ;;         (map create-pair _)
-  ;;         (reconstruct-all-literals (list) _ byte-stream))]
-  ;;       [(is-a? entity procedure%) (raise 'tried-deserialize-procedure-in-table-function)]))))
+  (define (read-table-values-from-disk schema table-name)
+    (let* ((file-name (build-ndf-filename #:data? 'data table-name))
+           (in (open-input-file file-name #:mode 'binary))
+           (byte-stream (port->bytes in))
+           (entity (hash-ref schema table-name)))
+      (cond
+        [(table? entity)
+         (define (create-pair key-field) (cons (car key-field) (fyeld-type (cdr key-field))))
+         (define (sort-by-position key-field1 key-field2)
+           (let ((p1 (fyeld-position (cdr key-field1)))
+                 (p2 (fyeld-position (cdr key-field2))))
+             (< p1 p2)))
+         (define (reconstruct-literal-data accumulator fields sub-byte-stream)
+           (let* ((first-elem (first fields))
+                  (name (car first-elem))
+                  (type (cdr first-elem))
+                  (size (type-byte-size type))
+                  (new-literal (from-bytes type (subbytes sub-byte-stream 0 size)))
+                  (return (append (list (cons name new-literal)) accumulator))
+                  (rest-fields (rest fields))
+                  (remaining-bytes (subbytes sub-byte-stream size (bytes-length sub-byte-stream))))
+             (if (empty? rest-fields)
+                 (cons return remaining-bytes)
+                 (reconstruct-literal-data return rest-fields remaining-bytes))))
+         (define (reconstruct-all-literals accumulator fields inner-byte-stream)            
+           (let* ((one-line (reconstruct-literal-data (list) fields inner-byte-stream))
+                  (computed-line (list (car one-line)))
+                  (remaining-bytes (cdr one-line))
+                  (return (append accumulator computed-line)))
+             (if (bytes=? #"" remaining-bytes)
+                 return
+                 (reconstruct-all-literals return fields remaining-bytes))))
+         (~>
+          (hash->list (table-fields entity))
+          (sort _ sort-by-position)
+          (map create-pair _)
+          (reconstruct-all-literals (list) _ byte-stream))]
+        [(procedura? entity) (raise 'tried-deserialize-procedure-in-table-function)]))))

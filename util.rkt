@@ -61,7 +61,7 @@
     [give-identifier (-> identifiable? string?)]
     [serialize (->* (serializable?) (#:size integer?) bytes?)]
     [deserialize (-> serializable? bytes? (values serializable? natural?))]
-    [from-bytes (-> byteable? bytes? byteable?)]
+    [from-bytes (-> byteable? bytes? serializable?)]
     [to-byte-size (-> byteable? natural?)])
    serializable?
    byteable?
@@ -90,7 +90,7 @@
   (provide
     (contract-out
       [deserialize-hash-list (-> serializable? bytes? list? list?)]
-      [serialize-hash-list (-> (listof (cons/c string? serializable?)) bytes?)]))
+      [serialize-hash-list (-> (listof (cons/c string? serializable?)) boolean? bytes?)]))
 
   (define (deserialize-hash-list entity byte-stream accumulator)
     (define (deserialize-name more-bytes)
@@ -108,7 +108,7 @@
            (subbytes byte-stream (+ name-consumed thing-consumed) (bytes-length byte-stream))
            (append accumulator (list (cons name thing)))))))
 
-  (define (serialize-hash-list named-values-list)
+  (define (serialize-hash-list named-values-list entity?)
         (define (serialize-name name)
           (let* ((name-bytes (string->bytes/utf-8 name))
                  (name-size (integer->integer-bytes (bytes-length name-bytes) 4 #t)))
@@ -121,5 +121,5 @@
                  (serialize-name name)
                  (serialize value))))
               named-values-list)
-         (bytes-join _ #""))))
+         (bytes-join _ (if entity? #"\n" #"")))))
 
