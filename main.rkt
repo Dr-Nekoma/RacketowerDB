@@ -9,50 +9,32 @@
   (check-equal? (+ 2 2) 4))
 
 ;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
-(module+ main
+{module+ main
   (require racket/base)
   (require racket/serialize)
   (require racket/class)
   (require (submod RacketowerDB/io writer))
   (require (submod RacketowerDB/io reader))
-  (require (submod RacketowerDB/language parser))
+  ;; (require (submod RacketowerDB/language parser))
   (require (submod RacketowerDB/backend server))
   (require RacketowerDB/util)
   
-  (require RacketowerDB/ast)
+  (require (except-in RacketowerDB/ast procedure?))
   
-  (let* ((field-name (new field% [position 0]
-                          [type (new type% [name 'VARCHAR]
-                                     [byte-size 5])]))
-         (field-editor (new field% [position 1]
-                            [type (new type% [name 'VARCHAR]
-                                       [byte-size 5])]))
-         (field-year (new field% [position 0]
-                          [type (new type% [name 'INTEGER]
-                                     [byte-size 4])]))
-         (table (new table% [fields (make-hash `(("NAME" . ,field-name)
-                                                 ("EDITOR" . ,field-editor)))]))
-         (car-table (new table% [fields (make-hash `(("MODEL" . ,field-name)
-                                                     ("YEAR" . ,field-year)))]))
-         (procedure (new procedure%))
-         (schema (make-hash (list)))
-         (row1 `(("NAME" . ,(new string% [value "Nathan"]))
-                 ("EDITOR" . ,(new string% [value "Visual Studio Code"]))))
-         (row2 `(("NAME" . ,(new string% [value "Lemos"]))
-                 ("EDITOR" . ,(new string% [value "Emacs"]))))
-         (row3 `(("MODEL" . ,(new string% [value "Ford"]))
-                 ("YEAR" . ,(new integer32% [value 1999]))))
-         (row4 `(("MODEL" . ,(new string% [value "Abc"]))
-                 ("YEAR" . ,(new integer32% [value 2013]))))
-         (literal1 (new string% [value "potatoes"]))
-         (literal2 (new integer32% [value 32]))
-         )
-    (hash-set! schema "TEST" procedure)
-    (hash-set! schema "PROGRAMMER" table)
+  (let* ((field-name (fyeld 0 (type 'VARCHAR 7)))
+         (field-editor (fyeld 1 (type 'VARCHAR 5)))
+         (field-year (fyeld 1 (type 'INTEGER 4)))
+         (programmer-table (table "table" 0 (make-hash `(("NAME" . ,field-name)
+                                                         ("EDITOR" . ,field-editor)))))
+         (car-table (table "table" 0 (make-hash `(("MODEL" . ,field-name)
+                                                  ("YEAR" . ,field-year)))))
+         (procedure-test (procedure "procedure"))
+         (schema (make-hash (list))))
+    (hash-set! schema "TEST" procedure-test)
+    (hash-set! schema "PROGRAMMER" programmer-table)
     (hash-set! schema "CAR" car-table)
     (write-schema-to-disk schema)
     (set! schema (read-schema-from-disk "schema"))
-    ;; (println (get-field byte-size (get-field type (hash-ref (get-field fields (hash-ref schema "CAR")) "MODEL"))))
     ;; (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
     ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
     ;; (define sample-input (open-input-string "CREATE RELATION CAR (MODEL STRING(5) YEAR INTEGER)"))
@@ -68,7 +50,7 @@
     ;;   (hash-set! schema new-table-name new-table)
     ;;   (set! schema (write-rows-to-disk schema new-table-name (list row3 row4)))
     ;;   (println schema)
-      ))
+      )}
 
   ;; (exit-handler)
   ;; (server-entrypoint)
