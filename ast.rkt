@@ -78,12 +78,13 @@
             (position-bytes (integer->integer-bytes position 1 #t))
             (type (fyeld-type self))
             (type-bytes (super-serialize type #:size (type-byte-size type))))
-        (bytes-append position-bytes type-bytes)))
+       (bytes-append position-bytes type-bytes)))
+   (define/generic super-deserialize deserialize)
    (define (deserialize self byte-stream)
      (let* ((position-value (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
             (type-bytes (subbytes byte-stream 1)))
-        (define-values (new-type type-consumed) (deserialize struct:type type-bytes))
-        (values (fyeld position-value new-type) (+ 1 type-consumed))))])
+       (define-values (new-type type-consumed) (super-deserialize struct:type type-bytes))
+       (values (fyeld position-value new-type) (+ 1 type-consumed))))])
 
 (define (fields-size fields)
   (let* ((fields-values (hash-values fields)))
@@ -102,7 +103,7 @@
      (let* ((row-id (table-row-id self))
             (row-id-bytes (integer->integer-bytes row-id 4 #t))
             (fields-list (hash->list (table-fields self))))
-       (bytes-append row-id-bytes (serialize-hash-list fields-list) #"\n"))) ;; Maybe the math is wrong because of this
+       (bytes-append row-id-bytes (serialize-hash-list fields-list) #"\n")))
    (define (deserialize self byte-stream)
      (let* ((row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
             (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '()))))
@@ -115,7 +116,7 @@
      (procedure-identifier self))]
   #:methods gen:serializable
   [(define (serialize _self #:size [_size #f])
-     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented") #"\n")) ;; Maybe the math is wrong because of this    
+     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented") #"\n"))
    {define (deserialize _self byte-stream)
      (println "procedures' deserialization is not yet implemented")
      (values (procedure "procedure") (bytes-length byte-stream))}])
