@@ -2,7 +2,8 @@
 (define collection "RacketowerDB")
 (define deps '("racket"
 	       "threading-lib"
-	       "beautiful-racket"))
+	       "beautiful-racket"
+	       "struct-update-lib"))
 (define build-deps '("scribble-lib"
 		     "racket-doc"
 		     "rackunit-lib"))

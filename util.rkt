@@ -1,21 +1,16 @@
 #lang racket
 
-(require racket/base)
+(require struct-update)
 (require threading)
 (require br/cond)
 
 (provide build-ndf-filename)
-(provide entity-classes)
+(provide entity-structs)
 (provide define-serializable)
 (provide fix-empty-read-bytes-lines)
 
-
 (require syntax/parse/define
          (for-syntax racket/syntax))
-
-;; (define-syntax-parse-rule (create name) 
-;;   #:with name-string (datum->syntax #f #'name)
-;;   (define name-string 2))
 
 (define (fix-empty-read-bytes-lines lines)
   (define (fix-one-turn inner-lines)
@@ -32,11 +27,10 @@
                          (set! newline-flag #t)
                          new-lines)
                        (append new-lines (list line))))) (list) inner-lines)))
-  (define (stop-condition lines-to-check) (empty? (filter (lambda (line) (bytes=? #"" line)) lines-to-check)))
+  (define (stop-condition lines-to-check) (empty? (filter (curry bytes=? #"") lines-to-check)))
   (while (not (stop-condition lines))
     (set! lines (fix-one-turn lines)))
   lines)
-
 
 (define build-ndf-filename
   (lambda (#:data? [data? 'entity] name)
@@ -47,57 +41,85 @@
 		  [else (raise 'error-not-specified-datatype)])))
       (string-append path (string-append name ".ndf")))))
 
-(define entity-classes (make-hash (list)))
+(define entity-structs (make-hash (list)))
 
-(define-syntax-parse-rule (define-serializable name body ...)
-    (begin
-        (define name body ...)
-        (hash-set! entity-classes (symbol->string 'name) name)))
+(define-syntax (define-serializable stx)
+  (syntax-case stx ()
+    [(define-serializable name body ...)
+     #`(begin
+         (struct name body ...)
+         (define-struct-updaters name)
+         (hash-set!
+          entity-structs
+          (symbol->string 'name)
+          #,(datum->syntax #'name (let ((datum-name (syntax->datum #'name)))
+                                  (string->symbol (string-append "struct:" (symbol->string datum-name)))))))]))
 
 (module interfaces racket
-  (provide serializable<%>)
-  (provide bytable<%>)
+  (provide
+   (contract-out
+    [give-identifier (-> identifiable? string?)]
+    [serialize (->* (serializable?) (#:size integer?) bytes?)]
+    [deserialize (-> serializable? bytes? (values serializable? natural?))]
+    [from-bytes (-> byteable? bytes? serializable?)]
+    [to-byte-size (-> byteable? natural?)])
+   serializable?
+   byteable?
+   identifiable?
+   gen:serializable
+   gen:byteable
+   gen:identifiable)
   
-  (define serializable<%>
-    (interface () serialize deserialize))
-  
-  (define bytable<%>
-    (interface () from-bytes to-byte-size)))
+  (require racket/generic)
+  (require racket/contract)
 
-(module+ classes
+  (define-generics identifiable #:requires [give-identifier]
+    (give-identifier identifiable))
+  
+  (define-generics serializable #:requires [serialize deserialize]
+    (serialize serializable #:size (size))
+    (deserialize serializable byte-stream))
+
+  (define-generics byteable #:requires [from-bytes to-byte-size]
+    (from-bytes byteable byte-stream)
+    (to-byte-size byteable)))
+
+(module+ hashable
   (require (submod ".." interfaces))
-  
-  (provide hashable%)
-  
-  (define hashable%
-    (class* object% (serializable<%>)
-      (abstract serialize)
-      (abstract deserialize)
-      (define/public (deserialize-hash-list byte-stream accumulator)
-        (define (deserialize-name more-bytes)
-          (let* ((name-size (integer-bytes->integer (subbytes more-bytes 0 4) #t))
-                 (name (bytes->string/utf-8 (subbytes more-bytes 4 (+ 4 name-size)))))
-            (cons name (+ 4 name-size))))
-        (if (equal? byte-stream #"")
-            accumulator
-            (let* ((name-consumption (deserialize-name byte-stream))
-                   (name-consumed (cdr name-consumption))
-                   (name (car name-consumption))
-                   (field-consumed (send this deserialize (subbytes byte-stream name-consumed))))
-              (deserialize-hash-list
-               (subbytes byte-stream (+ name-consumed field-consumed) (bytes-length byte-stream))
-               (append accumulator (list (cons name this)))))))
-      (define/public (serialize-hash-list named-values-list)
+
+  (provide
+    (contract-out
+      [deserialize-hash-list (-> serializable? bytes? list? list?)]
+      [serialize-hash-list (-> (listof (cons/c string? serializable?)) #:entity? boolean? bytes?)]))
+
+  (define (deserialize-hash-list entity byte-stream accumulator)
+    (define (deserialize-name more-bytes)
+      (let* ((name-size (integer-bytes->integer (subbytes more-bytes 0 4) #t))
+             (name (bytes->string/utf-8 (subbytes more-bytes 4 (+ 4 name-size)))))
+        (cons name (+ 4 name-size))))
+    (if (equal? byte-stream #"")
+        accumulator
+        (let* ((name-consumption (deserialize-name byte-stream))
+               (name-consumed (cdr name-consumption))
+               (name (car name-consumption)))
+          (define-values (thing thing-consumed) (deserialize entity (subbytes byte-stream name-consumed)))
+          (deserialize-hash-list
+           entity
+           (subbytes byte-stream (+ name-consumed thing-consumed) (bytes-length byte-stream))
+           (append accumulator (list (cons name thing)))))))
+
+  (define (serialize-hash-list named-values-list #:entity? entity?)
         (define (serialize-name name)
           (let* ((name-bytes (string->bytes/utf-8 name))
                  (name-size (integer->integer-bytes (bytes-length name-bytes) 4 #t)))
             (bytes-append name-size name-bytes)))
         (~>
          (map (lambda (named-value)
+                (let ((name (car named-value))
+                      (value (cdr named-value)))
                 (bytes-append
-                 (serialize-name (car named-value))
-                 (send (cdr named-value) serialize)))
+                 (serialize-name name)
+                 (serialize value))))
               named-values-list)
-         (bytes-join _ #"")))
-      (super-new))))
+         (bytes-join _ (if entity? #"\n" #"")))))
 

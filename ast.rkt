@@ -1,135 +1,122 @@
 #lang racket
 
 (require racket/class)
-(require racket/base)
-(require racket/serialize)
+(require struct-update)
+(require racket/generic)
+(require (except-in racket/serialize
+                    serialize
+                    deserialize
+                    serializable?))
 (require threading)
 
-(provide table%)
-(provide procedure%)
-(provide field%)
-(provide type%)
-(provide string%)
-(provide integer32%)
-(require RacketowerDB/util)
+(provide (struct+updaters-out table))
+(provide fields-size)
+(provide (struct+updaters-out procedure))
+(provide (struct+updaters-out fyeld))
+(provide (struct+updaters-out type))
+(provide stringl)
+(provide integer32)
+(require (only-in RacketowerDB/util define-serializable entity-structs))
 (require (submod RacketowerDB/util interfaces))
-(require (submod RacketowerDB/util classes))
+(require (submod RacketowerDB/util hashable))
 
-(define-serializable type%
-  [class* object% (bytable<%> serializable<%>)
-    (init-field [name null]
-                [byte-size null])
-    (define/public (from-bytes byte-stream)
+(define-serializable type
+  (name byte-size) #:transparent
+  #:methods gen:byteable
+    [(define (from-bytes self byte-stream)
       (let ((received-bytes-size (bytes-length byte-stream)))
-        (if (eq? received-bytes-size byte-size)
-            (case (list 'quote (string->symbol name))
-              [('INTEGER) (new integer32% [value (integer-bytes->integer byte-stream #t)])]
-              [('VARCHAR) (new string% [value (bytes->string/utf-8 byte-stream)])]
+        (if (equal? received-bytes-size (type-byte-size self))
+            (case (list 'quote (string->symbol (type-name self)))
+              [('INTEGER) (integer32 (integer-bytes->integer byte-stream #t))]
+              [('VARCHAR) (stringl (bytes->string/utf-8 byte-stream))]
               [else (raise 'error-with-unknown-type-from-bytes)])
             (raise 'error-with-from-bytes-size-check))))
-    (define/public (to-byte-size)
-      byte-size)
-    (define/public (serialize)
-      (let* ((name-bytes (string->bytes/utf-8 (symbol->string name)))
+     (define (to-byte-size self)
+       (type-byte-size self))]
+  #:methods gen:serializable
+    [(define (serialize self #:size [_size #f])
+      (let* ((name-bytes (string->bytes/utf-8 (symbol->string (type-name self))))
              (name-length (integer->integer-bytes (bytes-length name-bytes) 1 #t))
-             (byte-size-bytes (integer->integer-bytes byte-size 4 #t)))
+             (byte-size-bytes (integer->integer-bytes (type-byte-size self) 4 #t)))
         (bytes-append name-length name-bytes byte-size-bytes)))
-    (define/public (deserialize byte-stream)
-      (let* ((name-length (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
+     (define (deserialize _self byte-stream)
+       (let* ((name-length (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
              (name-value (bytes->string/utf-8 (subbytes byte-stream 1 (+ 1 name-length))))
              (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length) (+ 3 name-length)) #t)))
-        (set-field! name this name-value)
-        (set-field! byte-size this byte-size-value)
-        (+ 5 name-length)))
-      (super-new)])
+        (values (type name-value byte-size-value) (+ 5 name-length))))])
 
-(define literal%
-  (class* object% (printable<%>)
-    (init-field [value null])
-    (define/public (custom-print port _)
-      (print value port))
-    (define/public (custom-write port)
-      (write value port))
-    (define/public (custom-display port)
-      (display value port))
-    (super-new)))
-
-(define string%
-  (class* literal% (serializable<%>)
-    (define/public (serialize type)
-      (let* ((size-of-type (get-field byte-size type))
-             (size-of-string (string-length value)))
-        (if (< size-of-type size-of-string)
-            (string->bytes/utf-8 (substring value 0 size-of-type)) ;; Truncate
-            (let ((dest-bytes (make-bytes size-of-type 0))
+(define-serializable stringl
+  (value) #:transparent
+  #:methods gen:serializable
+  [(define (serialize self #:size [size #f])
+     (unless size (error "size is required"))
+     (let* ((value (stringl-value self))
+            (size-of-string (string-length value)))
+        (if (< size size-of-string)
+            (string->bytes/utf-8 (substring value 0 size)) ;; Truncate
+            (let ((dest-bytes (make-bytes size 0))
                   (serialyzed-string (string->bytes/utf-8 value)))
               (bytes-copy! dest-bytes 0 serialyzed-string)
-              dest-bytes)))) ;; Padding
-    (define/public (deserialize byte-array)
-      (set-field! value this (string-trim (bytes->string/utf-8 byte-array)))
-      (bytes-length byte-array))
-    (inherit-field value)
-    (super-new)))
+              dest-bytes))))
+   (define (deserialize _self byte-stream)
+     (values (stringl (string-trim (bytes->string/utf-8 byte-stream)) (bytes-length byte-stream))))])
 
-(define integer32%
-  (class* literal% (serializable<%>)
-    (define/public (serialize _)
-      (integer->integer-bytes value 4 #t))
-    (define/public (deserialize byte-array)
-      (set-field! value this (integer-bytes->integer (subbytes byte-array 0 4) #t))
-      4)
-    (inherit-field value)
-    (super-new)))
+(define-serializable integer32
+  (value) #:transparent
+  #:methods gen:serializable
+    [(define (serialize self #:size [_size #f])
+      (integer->integer-bytes (integer32-value self) 4 #t))
+     (define (deserialize _self byte-stream)
+      (values (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)) 4))])
 
-(define-serializable field%
-  (class hashable%
-    (init-field [position null]
-                [type null])
-    (define/override (serialize)
-      (let ((position-bytes (integer->integer-bytes position 1 #t))
-            (type-bytes (send type serialize)))
-        (bytes-append position-bytes type-bytes)))
-    (define/override (deserialize byte-stream)
-      (let* ((position-value (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
-             (type-bytes (subbytes byte-stream 1))
-             (new-type (new type%))
-             (type-consumed (send new-type deserialize type-bytes)))
-        (set-field! type this new-type)
-        (set-field! position this position-value)
-        (+ 1 type-consumed)))
-    (super-new)))
+(define-serializable fyeld
+  (position type) #:transparent
+  #:methods gen:serializable
+  [(define/generic super-serialize serialize)
+   (define (serialize self #:size [_size #f])
+     (let* ((position (fyeld-position self))
+            (position-bytes (integer->integer-bytes position 1 #t))
+            (type (fyeld-type self))
+            (type-bytes (super-serialize type #:size (type-byte-size type))))
+       (bytes-append position-bytes type-bytes)))
+   (define/generic super-deserialize deserialize)
+   (define (deserialize self byte-stream)
+     (let* ((position-value (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
+            (type-bytes (subbytes byte-stream 1)))
+       (define-values (new-type type-consumed) (super-deserialize struct:type type-bytes))
+       (values (fyeld position-value new-type) (+ 1 type-consumed))))])
 
-(define-serializable table%
-  (class hashable%
-    (define/public (fields-size)
-      (let* ((fields-values (hash-values fields)))
-        (foldl (lambda (elem acc)
-                 (let ((size (get-field byte-size (get-field type elem))))
-                   (+ acc size)))
-               0 fields-values)))
-    (init-field [row-id 0]
-                [identifier "table%"]
-                [fields (make-hash (list))])
-    (define/override (serialize)
-      (let* ((row-id-bytes (integer->integer-bytes row-id 4 #t))
-             (new-field (make-object field%))
-             (fields-list (hash->list fields)))
-        (bytes-append row-id-bytes (send new-field serialize-hash-list fields-list))))
-    (define/override (deserialize byte-array)
-      (let* ((row-id-value (integer-bytes->integer (subbytes byte-array 0 4) #t))
-             (new-field (make-object field%))
-             (fields-value (make-hash (send new-field deserialize-hash-list (subbytes byte-array 4) '()))))
-        (set-field! row-id this row-id-value)
-        (set-field! fields this fields-value)
-        (bytes-length byte-array)))
-    (super-new)))
-  
-  (define-serializable procedure%
-    (class hashable%
-      (init-field [identifier "procedure%"])
-      (define/override (serialize)
-        (string->bytes/utf-8 "procedures' serialization is not yet implemented"))
-      (define/override (deserialize byte-array)
-        (println "procedures' deserialization is not yet implemented")
-        (bytes-length byte-array))
-      (super-new)))
+(define (fields-size fields)
+  (let* ((fields-values (hash-values fields)))
+    (foldl (lambda (elem acc)
+             (let ((size (type-byte-size (fyeld-type elem))))
+               (+ acc size)))
+           0 fields-values)))
+
+(define-serializable table
+  (identifier row-id fields) #:transparent
+  #:methods gen:identifiable
+  [(define (give-identifier self)
+     (table-identifier self))]
+  #:methods gen:serializable
+  [(define (serialize self #:size [_size #f])
+     (let* ((row-id (table-row-id self))
+            (row-id-bytes (integer->integer-bytes row-id 4 #t))
+            (fields-list (hash->list (table-fields self))))
+       (bytes-append row-id-bytes (serialize-hash-list fields-list #:entity? #f))))
+   (define (deserialize self byte-stream)
+     (let* ((row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
+            (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '()))))
+       (values (table "table" row-id-value fields-value) (bytes-length byte-stream))))])
+
+(define-serializable procedure
+  (identifier) #:transparent
+  #:methods gen:identifiable
+  [(define (give-identifier self)
+     (procedure-identifier self))]
+  #:methods gen:serializable
+  [(define (serialize _self #:size [_size #f])
+     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented")))
+   (define (deserialize _self byte-stream)
+     (println "procedures' deserialization is not yet implemented")
+     (values (procedure "procedure") (bytes-length byte-stream)))])
