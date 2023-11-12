@@ -115,7 +115,7 @@
     (let* ((file-name (build-ndf-filename schema-name  #:data? 'schema))
            (in (open-input-file file-name #:mode 'binary))
            (schema (make-immutable-hash (list)))
-           (real-lines (port->bytes-lines in))
+           (real-lines (port->bytes-lines in #:close? #t))
            (read-lines (fix-empty-read-bytes-lines real-lines)))
       (~> (foldl
            (lambda (line-in-bytes acc)
@@ -130,13 +130,13 @@
   (define (read-table-from-disk table-name)
     (let* ((file-name (build-ndf-filename #:data? 'entity table-name))
            (in (open-input-file file-name #:mode 'binary)))
-      (define-values (table table-consumed) (deserialize struct:table (port->bytes in)))
+      (define-values (table table-consumed) (deserialize struct:table (port->bytes in #:close? #t)))
       table))
 
   (define (read-table-values-from-disk schema table-name)
     (let* ((file-name (build-ndf-filename #:data? 'data table-name))
            (in (open-input-file file-name #:mode 'binary))
-           (byte-stream (port->bytes in))
+           (byte-stream (port->bytes in #:close? #t))
            (entity (hash-ref schema table-name)))
       (cond
         [(table? entity)
