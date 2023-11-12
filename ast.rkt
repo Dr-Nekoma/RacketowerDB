@@ -25,7 +25,7 @@
   #:methods gen:byteable
     [(define (from-bytes self byte-stream)
       (let ((received-bytes-size (bytes-length byte-stream)))
-        (if (eq? received-bytes-size (type-byte-size self))
+        (if (equal? received-bytes-size (type-byte-size self))
             (case (list 'quote (string->symbol (type-name self)))
               [('INTEGER) (integer32 (integer-bytes->integer byte-stream #t))]
               [('VARCHAR) (stringl (bytes->string/utf-8 byte-stream))]
