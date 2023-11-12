@@ -27,7 +27,7 @@
                          (set! newline-flag #t)
                          new-lines)
                        (append new-lines (list line))))) (list) inner-lines)))
-  (define (stop-condition lines-to-check) (empty? (filter (lambda (line) (bytes=? #"" line)) lines-to-check)))
+  (define (stop-condition lines-to-check) (empty? (filter (curry bytes=? #"") lines-to-check)))
   (while (not (stop-condition lines))
     (set! lines (fix-one-turn lines)))
   lines)
