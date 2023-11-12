@@ -117,6 +117,6 @@
   #:methods gen:serializable
   [(define (serialize _self #:size [_size #f])
      (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented")))
-   {define (deserialize _self byte-stream)
+   (define (deserialize _self byte-stream)
      (println "procedures' deserialization is not yet implemented")
-     (values (procedure "procedure") (bytes-length byte-stream))}])
+     (values (procedure "procedure") (bytes-length byte-stream)))])

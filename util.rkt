@@ -16,7 +16,7 @@
   (define (fix-one-turn inner-lines)
     (let ((newline-flag #f))
       (foldl (lambda (line new-lines)
-               [if newline-flag
+               (if newline-flag
                    (begin
                      (begin
                        (set! newline-flag #f)
@@ -26,7 +26,7 @@
                        (begin
                          (set! newline-flag #t)
                          new-lines)
-                       (append new-lines (list line)))]) (list) inner-lines)))
+                       (append new-lines (list line))))) (list) inner-lines)))
   (define (stop-condition lines-to-check) (empty? (filter (lambda (line) (bytes=? #"" line)) lines-to-check)))
   (while (not (stop-condition lines))
     (set! lines (fix-one-turn lines)))
