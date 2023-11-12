@@ -40,11 +40,10 @@
                 (total-size (fields-size (table-fields entity)))
                 (off-set (* row-id total-size))
                 (file-name (build-ndf-filename table-name #:data? 'data)))
-           (call-with-output-file file-name
+           (call-with-output-file file-name #:exists 'can-update
              (lambda (out)
                (file-position out off-set)
-               (write-bytes converted-row out))
-             #:exists 'can-update)
+               (write-bytes converted-row out)))
            (set! schema (update-row-id-table schema table-name (+ row-id 1))))]
         [(procedura? entity)
          (println "Don't write procedures yet")])
@@ -70,9 +69,8 @@
   (define (write-table-to-disk table table-name)
     (let* ((serialized-table (serialize table))
            (file-name (build-ndf-filename table-name)))
-      (call-with-output-file file-name
-        (curry write-bytes serialized-table)
-         #:exists 'truncate)))
+      (call-with-output-file file-name #:exists 'truncate
+        (curry write-bytes serialized-table))))
   
   (define (write-schema-to-disk schema)
     (define (write-entity-to-disk file-out entities-list)
@@ -83,11 +81,10 @@
         (newline file-out)))
     (let* ((schema-list (hash->list schema))
            (file-name (build-ndf-filename "schema" #:data? 'schema)))
-      (call-with-output-file file-name
+      (call-with-output-file file-name #:exists 'truncate
         (lambda (out)
           (~>> (group-by (compose give-identifier cdr) schema-list)
-               (map (curry write-entity-to-disk out))))
-        #:exists 'truncate))))
+               (map (curry write-entity-to-disk out))))))))
 
 (module+ reader
   (require RacketowerDB/util)
