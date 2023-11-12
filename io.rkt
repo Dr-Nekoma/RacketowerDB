@@ -10,7 +10,6 @@
   (require (submod RacketowerDB/util interfaces))
   (require (submod RacketowerDB/util hashable))  
   (require struct-update)  
-  (require compose-app)
   (provide write-rows-to-disk)
   (provide write-table-to-disk)
   (provide write-schema-to-disk)
@@ -86,7 +85,7 @@
            (file-name (build-ndf-filename "schema" #:data? 'schema)))
       (call-with-output-file file-name
         (lambda (out)
-          (~>> (group-by (give-identifier .. cdr) schema-list)
+          (~>> (group-by (compose give-identifier cdr) schema-list)
                (map (curry write-entity-to-disk out))))
         #:exists 'truncate))))
 
