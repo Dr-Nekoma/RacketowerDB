@@ -103,7 +103,7 @@
      (let* ((row-id (table-row-id self))
             (row-id-bytes (integer->integer-bytes row-id 4 #t))
             (fields-list (hash->list (table-fields self))))
-       (bytes-append row-id-bytes (serialize-hash-list fields-list #f))))
+       (bytes-append row-id-bytes (serialize-hash-list fields-list #:entity? #f))))
    (define (deserialize self byte-stream)
      (let* ((row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
             (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '()))))

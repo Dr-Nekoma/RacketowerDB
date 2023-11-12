@@ -90,7 +90,7 @@
   (provide
     (contract-out
       [deserialize-hash-list (-> serializable? bytes? list? list?)]
-      [serialize-hash-list (-> (listof (cons/c string? serializable?)) boolean? bytes?)]))
+      [serialize-hash-list (-> (listof (cons/c string? serializable?)) #:entity? boolean? bytes?)]))
 
   (define (deserialize-hash-list entity byte-stream accumulator)
     (define (deserialize-name more-bytes)
@@ -108,7 +108,7 @@
            (subbytes byte-stream (+ name-consumed thing-consumed) (bytes-length byte-stream))
            (append accumulator (list (cons name thing)))))))
 
-  (define (serialize-hash-list named-values-list entity?)
+  (define (serialize-hash-list named-values-list #:entity? entity?)
         (define (serialize-name name)
           (let* ((name-bytes (string->bytes/utf-8 name))
                  (name-size (integer->integer-bytes (bytes-length name-bytes) 4 #t)))

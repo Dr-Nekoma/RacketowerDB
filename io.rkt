@@ -79,7 +79,7 @@
       (let* ((entity-name (give-identifier (cdr (car entities-list)))))
         (write-string entity-name file-out)
         (newline file-out)
-        (write-bytes (serialize-hash-list entities-list #t) file-out)
+        (write-bytes (serialize-hash-list entities-list #:entity? #t) file-out)
         (newline file-out)))
     (let* ((schema-list (hash->list schema))
            (file-name (build-ndf-filename "schema" #:data? 'schema)))
