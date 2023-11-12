@@ -9,7 +9,8 @@
   (require RacketowerDB/util)
   (require (submod RacketowerDB/util interfaces))
   (require (submod RacketowerDB/util hashable))  
-  (require struct-update)
+  (require struct-update)  
+  (require compose-app)
   (provide write-rows-to-disk)
   (provide write-table-to-disk)
   (provide write-schema-to-disk)
@@ -39,11 +40,12 @@
                 (row-id (table-row-id entity))
                 (total-size (fields-size (table-fields entity)))
                 (off-set (* row-id total-size))
-                (file-name (build-ndf-filename table-name #:data? 'data))
-                (out (open-output-file file-name #:exists 'can-update)))
-           (file-position out off-set)
-           (write-bytes converted-row out)
-           (close-output-port out)
+                (file-name (build-ndf-filename table-name #:data? 'data)))
+           (call-with-output-file file-name
+             (lambda (out)
+               (file-position out off-set)
+               (write-bytes converted-row out))
+             #:exists 'can-update)
            (set! schema (update-row-id-table schema table-name (+ row-id 1))))]
         [(procedura? entity)
          (println "Don't write procedures yet")])
@@ -68,10 +70,10 @@
 
   (define (write-table-to-disk table table-name)
     (let* ((serialized-table (serialize table))
-           (file-name (build-ndf-filename table-name))
-           (out (open-output-file file-name #:exists 'truncate)))
-      (write-bytes serialized-table out)
-      (close-output-port out)))
+           (file-name (build-ndf-filename table-name)))
+      (call-with-output-file file-name
+        (curry write-bytes serialized-table)
+         #:exists 'truncate)))
   
   (define (write-schema-to-disk schema)
     (define (write-entity-to-disk file-out entities-list)
@@ -81,11 +83,12 @@
         (write-bytes (serialize-hash-list entities-list #t) file-out)
         (newline file-out)))
     (let* ((schema-list (hash->list schema))
-           (file-name (build-ndf-filename "schema" #:data? 'schema))
-           (out (open-output-file file-name #:exists 'truncate)))
-      (~>> (group-by (lambda (x) (give-identifier (cdr x))) schema-list)
-           (map (curry write-entity-to-disk out)))
-      (close-output-port out))))
+           (file-name (build-ndf-filename "schema" #:data? 'schema)))
+      (call-with-output-file file-name
+        (lambda (out)
+          (~>> (group-by (give-identifier .. cdr) schema-list)
+               (map (curry write-entity-to-disk out))))
+        #:exists 'truncate))))
 
 (module+ reader
   (require RacketowerDB/util)

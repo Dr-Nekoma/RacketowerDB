@@ -3,7 +3,8 @@
 (define deps '("racket"
 	       "threading-lib"
 	       "beautiful-racket"
-	       "struct-update-lib"))
+	       "struct-update-lib"
+	       "compose-app"))
 (define build-deps '("scribble-lib"
 		     "racket-doc"
 		     "rackunit-lib"))
