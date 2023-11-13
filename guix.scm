@@ -2,6 +2,8 @@
   (guix)
   (guix build-system gnu)
   ((guix licenses) #:prefix license:)
+  (gnu packages clojure)
+  (gnu packages emacs)
   (gnu packages racket)
   (gnu packages rust-apps)
   (gnu packages version-control))
@@ -14,6 +16,8 @@
   (native-inputs
     (list
        racket
+       clojure-tools
+       emacs
        just
        git))
   (inputs
