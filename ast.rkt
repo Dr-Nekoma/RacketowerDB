@@ -9,13 +9,14 @@
                     serializable?))
 (require threading)
 
+(provide check-local-constraints)
 (provide (struct+updaters-out table))
 (provide fields-size)
 (provide (struct+updaters-out procedure))
 (provide (struct+updaters-out fyeld))
+(provide (struct+updaters-out integer32))
 (provide (struct+updaters-out type))
 (provide stringl)
-(provide integer32)
 (require (only-in RacketowerDB/util define-serializable entity-structs))
 (require (submod RacketowerDB/util interfaces))
 (require (submod RacketowerDB/util hashable))
@@ -93,8 +94,12 @@
                (+ acc size)))
            0 fields-values)))
 
+(define (check-local-constraints table rows)
+  (let ((constraints (table-local-constraints table)))
+      (andmap (lambda (constraint) ((eval-syntax constraint) rows)) constraints)))
+
 (define-serializable table
-  (identifier row-id fields) #:transparent
+  (identifier row-id fields local-constraints) #:transparent
   #:methods gen:identifiable
   [(define (give-identifier self)
      (table-identifier self))]
