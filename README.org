@@ -11,6 +11,12 @@ Do not use it professionally (it's always good to warn).
  - [X] Write the logical schema onto disk
  - [X] Reads of tables and schemas
  - [X] Persistent storage
+ - [ ] Constraints
+  + [ ] Add row-id to row reading from the disk
+  + [ ] Add local constraints to table struct
+  + [ ] Do a proof of concept using the backticked lambdas for local constraints
+  + [ ] Do a proof of concept using the hashed values for set constraints
+  + [ ] Add a serialization for constraints
  - [ ] Query Language
  - [ ] Server
  - [ ] Keys (logical and indexing)
