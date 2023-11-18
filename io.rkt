@@ -16,9 +16,9 @@
   (define (convert-literal table attribute-name literal)
     (let* [(attribute (hash-ref (table-fields table)
                                 attribute-name))
-           (type (fyeld-type attribute))
+           (type (field-type attribute))
            (type-size (type-byte-size type))
-           (position (fyeld-position attribute))]
+           (position (field-position attribute))]
       (cons position (serialize literal #:size type-size))))
 
   (define (convert-row table row)
@@ -136,10 +136,10 @@
            (entity (hash-ref schema table-name))]
       (cond
         [(table? entity)
-         (define (create-pair key-field) (cons (car key-field) (fyeld-type (cdr key-field))))
+         (define (create-pair key-field) (cons (car key-field) (field-type (cdr key-field))))
          (define (sort-by-position key-field1 key-field2)
-           (let [(p1 (fyeld-position (cdr key-field1)))
-                 (p2 (fyeld-position (cdr key-field2)))]
+           (let [(p1 (field-position (cdr key-field1)))
+                 (p2 (field-position (cdr key-field2)))]
              (< p1 p2)))
          (define (reconstruct-literal-data accumulator fields sub-byte-stream)
            (let* [(first-elem (first fields))

@@ -1,7 +1,6 @@
 #lang racket
 (require
   racket/serialize
-  racket/class
   (rename-in RacketowerDB/ast (procedure? procedura?))
   (submod RacketowerDB/io writer)
   (submod RacketowerDB/io reader)
@@ -23,10 +22,10 @@
 ;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
 (module+ main
 
-  (define field-name (fyeld 0 (type 'VARCHAR 7)))
-  (define field-editor (fyeld 1 (type 'VARCHAR 5)))
-  (define field-year (fyeld 1 (type 'INTEGER 4)))
-  (define field-age (fyeld 2 (type 'INTEGER 4)))
+  (define field-name (field 0 (type 'VARCHAR 7)))
+  (define field-editor (field 1 (type 'VARCHAR 5)))
+  (define field-year (field 1 (type 'INTEGER 4)))
+  (define field-age (field 2 (type 'INTEGER 4)))
 
 
   (define constraint-1

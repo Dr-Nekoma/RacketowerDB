@@ -5,7 +5,7 @@
   (struct+updaters-out table)
   fields-size
   (struct+updaters-out procedure)
-  (struct+updaters-out fyeld)
+  (struct+updaters-out field)
   (struct+updaters-out integer32)
   (struct+updaters-out type)
   stringl)
@@ -65,13 +65,13 @@
    (define (deserialize _self byte-stream)
      (values (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)) 4))])
 
-(define-serializable fyeld [position type] #:transparent
+(define-serializable field [position type] #:transparent
   #:methods gen:serializable
   [(define/generic super-serialize serialize)
    (define (serialize self #:size [_size #f])
-     (let* [(position (fyeld-position self))
+     (let* [(position (field-position self))
             (position-bytes (integer->integer-bytes position 1 #t))
-            (type (fyeld-type self))
+            (type (field-type self))
             (type-bytes (super-serialize type #:size (type-byte-size type)))]
        (bytes-append position-bytes type-bytes)))
    (define/generic super-deserialize deserialize)
@@ -79,12 +79,12 @@
      (let* [(position-value (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
             (type-bytes (subbytes byte-stream 1))]
        (define-values [new-type type-consumed] (super-deserialize struct:type type-bytes))
-       (values (fyeld position-value new-type) (+ 1 type-consumed))))])
+       (values (field position-value new-type) (+ 1 type-consumed))))])
 
 (define (fields-size fields)
   (let* [(fields-values (hash-values fields))]
     (foldl (lambda [elem acc]
-             (let [(size (type-byte-size (fyeld-type elem)))]
+             (let [(size (type-byte-size (field-type elem)))]
                (+ acc size)))
       0 fields-values)))
 
@@ -107,7 +107,7 @@
        (bytes-append row-id-bytes (serialize-hash-list fields-list #:entity? #f))))
    (define (deserialize self byte-stream)
      (let* [(row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
-            (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '())))]
+            (fields-value (make-hash (deserialize-hash-list struct:field (subbytes byte-stream 4) '())))]
        (values
          (table "table" row-id-value fields-value (list)) ;; TODO: constraints
          (bytes-length byte-stream))))])
