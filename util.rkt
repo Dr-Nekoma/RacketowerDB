@@ -18,7 +18,6 @@
                (cond
                  [newline-flag
                   (set! newline-flag #f)
-                  new-lines
                   (append new-lines (list (bytes-append #"\n" line)))]
 
                  [(bytes=? #"" line)
