@@ -83,7 +83,8 @@
       (call-with-output-file file-name #:exists 'truncate
         (lambda [out]
           (~>> (group-by (compose give-identifier cdr) schema-list)
-               (map (curry write-entity-to-disk out))))))))
+               (map (curry write-entity-to-disk out)))
+          (void))))))
 
 (module+ reader
   (provide
