@@ -108,7 +108,9 @@
    (define (deserialize self byte-stream)
      (let* [(row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
             (fields-value (make-hash (deserialize-hash-list struct:fyeld (subbytes byte-stream 4) '())))]
-       (values (table "table" row-id-value fields-value) (bytes-length byte-stream))))])
+       (values
+         (table "table" row-id-value fields-value (list)) ;; TODO: constraints
+         (bytes-length byte-stream))))])
 
 (define-serializable procedure [identifier] #:transparent
   #:methods gen:identifiable
