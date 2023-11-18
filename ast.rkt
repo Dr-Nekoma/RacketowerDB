@@ -11,10 +11,8 @@
   stringl)
 
 (require
-  racket/class
   struct-update
   racket/generic
-  (except-in racket/serialize serialize deserialize serializable?)
   threading
   (only-in RacketowerDB/util define-serializable entity-structs)
   (submod RacketowerDB/util interfaces)
