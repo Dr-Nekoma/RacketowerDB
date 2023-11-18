@@ -92,7 +92,9 @@
 
 (define (check-local-constraints table rows)
   (let [(constraints (table-local-constraints table))]
-    (andmap (lambda (constraint) ((eval-syntax constraint) rows)) constraints)))
+    (andmap (lambda [constraint]
+              ((eval-syntax constraint) rows))
+      constraints)))
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent

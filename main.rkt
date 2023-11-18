@@ -30,11 +30,11 @@
 
 
   (define constraint-1
-    #`(lambda (rows)
+    #`(lambda [rows]
         (andmap
-          (lambda (row)
+          (lambda [row]
             (andmap
-              (lambda (raw-field)
+              (lambda [raw-field]
                 (let [(raw-name (car raw-field))
                       (raw-value (cdr raw-field))]
                   (if (equal? raw-name "AGE")
