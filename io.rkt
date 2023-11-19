@@ -69,7 +69,8 @@
     (let* [(serialized-table (serialize table))
            (file-name (build-ndf-filename table-name))]
       (call-with-output-file file-name #:exists 'truncate
-        (curry write-bytes serialized-table))))
+        (curry write-bytes serialized-table))
+      (void)))
 
   (define (write-schema-to-disk schema)
     (define (write-entity-to-disk file-out entities-list)
