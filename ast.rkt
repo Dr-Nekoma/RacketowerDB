@@ -21,16 +21,16 @@
 (define-serializable type [name byte-size] #:transparent
   #:guard
   (checked-guard
-    [(name . (and/c string? immutable?))
+    [(name . symbol?)
      (byte-size . exact-nonnegative-integer?)]
     (values name byte-size))
   #:methods gen:byteable
   [(define (from-bytes self byte-stream)
      (let [(received-bytes-size (bytes-length byte-stream))]
        (if (equal? received-bytes-size (type-byte-size self))
-         (case (list 'quote (string->symbol (type-name self)))
-           [('INTEGER) (integer32 (integer-bytes->integer byte-stream #t))]
-           [('VARCHAR) (stringl (bytes->string/utf-8 byte-stream))]
+         (case (type-name self)
+           [[INTEGER] (integer32 (integer-bytes->integer byte-stream #t))]
+           [[VARCHAR] (stringl (bytes->string/utf-8 byte-stream))]
            [else (raise 'error-with-unknown-type-from-bytes)])
          (raise 'error-with-from-bytes-size-check))))
    (define (to-byte-size self)
@@ -43,7 +43,11 @@
        (bytes-append name-length name-bytes byte-size-bytes)))
    (define (deserialize _self byte-stream)
      (let* [(name-length (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
-            (name-value (bytes->string/utf-8 (subbytes byte-stream 1 (+ 1 name-length))))
+            (name-value (~> name-length
+                          add1
+                          (subbytes byte-stream 1 _)
+                          bytes->string/utf-8
+                          string->symbol))
             (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length) (+ 3 name-length)) #t))]
       (values (type name-value byte-size-value) (+ 5 name-length))))])
 
