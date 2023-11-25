@@ -68,19 +68,15 @@
              syntax->list
              length
              range)))
-       (let [(ret
-              #`(lambda [args ... name]
-                  (unless (preds args)
-                    (raise-argument-error name
-                      (with-output-to-string
-                        (lambda []
-                          (write 'preds)))
-                      n
-                      args ...)) ...
-                  body ...))]
-         (displayln (syntax->datum ret))
-         (newline)
-         ret))]))
+       #`(lambda [args ... name]
+           (unless (preds args)
+             (raise-argument-error name
+               (with-output-to-string
+                 (lambda []
+                   (write 'preds)))
+               n
+               args ...)) ...
+           body ...))]))
 
 (module interfaces racket
   (provide
