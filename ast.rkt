@@ -177,9 +177,6 @@
                (loop (cons constraint-value acc) (- n 1) (+ consumed-bytes constraint-size) (subbytes streamb constraint-size))))))
      (define row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
      (define-values (constraints-length constraints-value) (deserialize-constraints (subbytes byte-stream 4)))
-     (println constraints-length)
-     (println constraints-value)
-     (println (subbytes byte-stream (+ 4 constraints-length)))
      (define fields-value (make-hash (deserialize-hash-list struct:field (subbytes byte-stream (+ 4 constraints-length)) '())))
      (values
       (table "table" row-id-value fields-value constraints-value)

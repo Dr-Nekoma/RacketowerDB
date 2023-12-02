@@ -23,7 +23,7 @@
 (module+ main
 
   (define field-name (field 0 (type 'VARCHAR 7)))
-  (define field-editor (field 1 (type 'VARCHAR 10)))
+  (define field-editor (field 1 (type 'VARCHAR 9)))
   (define field-year (field 1 (type 'INTEGER 4)))
   (define field-age (field 2 (type 'INTEGER 4)))
 
