@@ -8,24 +8,29 @@
   (struct+updaters-out field)
   (struct+updaters-out integer32)
   (struct+updaters-out type)
-  stringl)
+  (struct+updaters-out stringl))
 
 (require
   struct-update
   racket/generic
   threading
-  (only-in RacketowerDB/util define-serializable entity-structs)
+  (only-in RacketowerDB/util define-serializable entity-structs checked-guard)
   (submod RacketowerDB/util interfaces)
   (submod RacketowerDB/util hashable))
 
 (define-serializable type [name byte-size] #:transparent
+  #:guard
+  (checked-guard
+    [(name . symbol?)
+     (byte-size . exact-nonnegative-integer?)]
+    (values name byte-size))
   #:methods gen:byteable
   [(define (from-bytes self byte-stream)
      (let [(received-bytes-size (bytes-length byte-stream))]
        (if (equal? received-bytes-size (type-byte-size self))
-         (case (list 'quote (string->symbol (type-name self)))
-           [('INTEGER) (integer32 (integer-bytes->integer byte-stream #t))]
-           [('VARCHAR) (stringl (bytes->string/utf-8 byte-stream))]
+         (case (type-name self)
+           [[INTEGER] (integer32 (integer-bytes->integer byte-stream #t))]
+           [[VARCHAR] (stringl (bytes->string/utf-8 byte-stream))]
            [else (raise 'error-with-unknown-type-from-bytes)])
          (raise 'error-with-from-bytes-size-check))))
    (define (to-byte-size self)
@@ -38,11 +43,19 @@
        (bytes-append name-length name-bytes byte-size-bytes)))
    (define (deserialize _self byte-stream)
      (let* [(name-length (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
-            (name-value (bytes->string/utf-8 (subbytes byte-stream 1 (+ 1 name-length))))
+            (name-value (~> name-length
+                          add1
+                          (subbytes byte-stream 1 _)
+                          bytes->string/utf-8
+                          string->symbol))
             (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length) (+ 3 name-length)) #t))]
       (values (type name-value byte-size-value) (+ 5 name-length))))])
 
 (define-serializable stringl [value] #:transparent
+  #:guard
+  (checked-guard
+    [(value . string?)]
+    value)
   #:methods gen:serializable
   [(define (serialize self #:size [size #f])
      (unless size
@@ -59,6 +72,10 @@
      (values (stringl (string-trim (bytes->string/utf-8 byte-stream)) (bytes-length byte-stream))))])
 
 (define-serializable integer32 [value] #:transparent
+  #:guard
+  (checked-guard
+    [(value . exact-nonnegative-integer?)]
+    value)
   #:methods gen:serializable
   [(define (serialize self #:size [_size #f])
      (integer->integer-bytes (integer32-value self) 4 #t))
@@ -66,6 +83,11 @@
      (values (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)) 4))])
 
 (define-serializable field [position type] #:transparent
+  #:guard
+  (checked-guard
+    [(position . exact-nonnegative-integer?)
+     (type . type?)]
+    (values position type))
   #:methods gen:serializable
   [(define/generic super-serialize serialize)
    (define (serialize self #:size [_size #f])
@@ -96,6 +118,13 @@
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent
+  #:guard
+  (checked-guard
+    [(identifier . (and/c string? immutable?))
+     (row-id . exact-nonnegative-integer?)
+     (fields . hash?)
+     (local-constraints . (listof syntax?))]
+    (values identifier row-id fields local-constraints))
   #:methods gen:identifiable
   [(define (give-identifier self)
      (table-identifier self))]
@@ -113,6 +142,10 @@
          (bytes-length byte-stream))))])
 
 (define-serializable procedure [identifier] #:transparent
+  #:guard
+  (checked-guard
+    [(identifier . (and/c string? immutable?))]
+    identifier)
   #:methods gen:identifiable
   [(define (give-identifier self)
      (procedure-identifier self))]

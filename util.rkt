@@ -2,11 +2,13 @@
 
 (provide
   build-ndf-filename
+  checked-guard
   entity-structs
   define-serializable
   fix-empty-read-bytes-lines)
 
 (require
+  (for-syntax threading racket/syntax racket/list)
   struct-update
   threading
   br/cond)
@@ -55,6 +57,26 @@
            #,(datum->syntax #'name
                (let [(datum-name (syntax->datum #'name))]
                  (string->symbol (string-append "struct:" (symbol->string datum-name)))))))]))
+
+(define-syntax (checked-guard stx)
+  (syntax-case stx []
+    [(_ [(args . preds) ...] body ...)
+     (let []
+       (define/with-syntax [n ...]
+         (datum->syntax #'[args ...]
+           (~> #'[args ...]
+             syntax->list
+             length
+             range)))
+       #`(lambda [args ... name]
+           (unless (preds args)
+             (raise-argument-error name
+               (with-output-to-string
+                 (lambda []
+                   (write 'preds)))
+               n
+               args ...)) ...
+           body ...))]))
 
 (module interfaces racket
   (provide
