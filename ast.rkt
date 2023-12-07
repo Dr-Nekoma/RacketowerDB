@@ -132,16 +132,16 @@
   [(define (serialize self #:size [_size #f])
      (define (serialize-constraints constraint-list)
        (define (serialize-constraint constraint)
-         (let* [(serialized-constraint (string->bytes/utf-8 (call-with-output-string
-                                                             (lambda (s-port)
-                                                               (write (syntax->datum constraint) s-port)))))
+         (let* [(serialized-constraint (call-with-output-bytes
+                                        (lambda (s-port)
+                                          (write (syntax->datum constraint) s-port))))
                 (constraint-size (call-with-output-bytes
                                   (lambda (c-port)
                                     (write-char (integer->char (bytes-length serialized-constraint)) c-port))))]
            (bytes-append constraint-size serialized-constraint)))
        (define constraints-count (length constraint-list))
-       (unless (<= constraints-count #xffff)
-         (raise 'too-many-constraints))
+       (unless (<= constraints-count #xff)
+         (raise 'using-more-constraints-than-supported))
        (let [(serialized-count (integer->integer-bytes constraints-count 1 #f))
              (serialized-constraints (bytes-join (map serialize-constraint constraint-list) #""))]
          (bytes-append serialized-count serialized-constraints)))
@@ -160,7 +160,7 @@
      (define (deserialize-constraint byte-array)
        (define-values (constraint-size-consumed constraint-size) (utf8-character-as-integer byte-array))
        (let* [(constraint (datum->syntax
-                           #'a
+                           #'a ;; TODO: We should change this to a proper scope
                            (read (open-input-bytes
                                   (subbytes byte-array constraint-size-consumed
                                             (+ constraint-size constraint-size-consumed))))))]
