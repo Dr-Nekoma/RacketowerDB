@@ -130,16 +130,57 @@
      (table-identifier self))]
   #:methods gen:serializable
   [(define (serialize self #:size [_size #f])
+     (define (serialize-constraints constraint-list)
+       (define (serialize-constraint constraint)
+         (let* [(serialized-constraint (call-with-output-bytes
+                                        (lambda (s-port)
+                                          (write (syntax->datum constraint) s-port))))
+                (constraint-size (call-with-output-bytes
+                                  (lambda (c-port)
+                                    (write-char (integer->char (bytes-length serialized-constraint)) c-port))))]
+           (bytes-append constraint-size serialized-constraint)))
+       (define constraints-count (length constraint-list))
+       (unless (<= constraints-count #xff)
+         (raise 'using-more-constraints-than-supported))
+       (let [(serialized-count (integer->integer-bytes constraints-count 1 #f))
+             (serialized-constraints (bytes-join (map serialize-constraint constraint-list) #""))]
+         (bytes-append serialized-count serialized-constraints)))
      (let* [(row-id (table-row-id self))
             (row-id-bytes (integer->integer-bytes row-id 4 #t))
-            (fields-list (hash->list (table-fields self)))]
-       (bytes-append row-id-bytes (serialize-hash-list fields-list #:entity? #f))))
+            (fields-list (hash->list (table-fields self)))            
+            (constraints (serialize-constraints (table-local-constraints self)))]
+       (bytes-append row-id-bytes constraints (serialize-hash-list fields-list #:entity? #f))))
    (define (deserialize self byte-stream)
-     (let* [(row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
-            (fields-value (make-hash (deserialize-hash-list struct:field (subbytes byte-stream 4) '())))]
-       (values
-         (table "table" row-id-value fields-value (list)) ;; TODO: constraints
-         (bytes-length byte-stream))))])
+     (define (utf8-character-as-integer byte-array)
+       (call-with-input-bytes
+        byte-array
+        (lambda (c-port)
+          (let [(char-read (read-char c-port))]
+            (values (char-utf-8-length char-read) (char->integer char-read))))))
+     (define (deserialize-constraint byte-array)
+       (define-values (constraint-size-consumed constraint-size) (utf8-character-as-integer byte-array))
+       (let* [(constraint (datum->syntax
+                           #'a ;; TODO: We should change this to a proper scope
+                           (read (open-input-bytes
+                                  (subbytes byte-array constraint-size-consumed
+                                            (+ constraint-size constraint-size-consumed))))))]
+         (values (+ constraint-size constraint-size-consumed) constraint)))
+     (define (deserialize-constraints byte-array)
+       (let loop [(acc (list))
+                  (n (integer-bytes->integer (subbytes byte-array 0 1) 1 #f))
+                  (consumed-bytes 1)
+                  (streamb (subbytes byte-array 1))]
+         (if (zero? n)
+             (values consumed-bytes acc)
+             (let [] 
+               (define-values (constraint-size constraint-value) (deserialize-constraint streamb))
+               (loop (cons constraint-value acc) (- n 1) (+ consumed-bytes constraint-size) (subbytes streamb constraint-size))))))
+     (define row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
+     (define-values (constraints-length constraints-value) (deserialize-constraints (subbytes byte-stream 4)))
+     (define fields-value (make-hash (deserialize-hash-list struct:field (subbytes byte-stream (+ 4 constraints-length)) '())))
+     (values
+      (table "table" row-id-value fields-value constraints-value)
+      (bytes-length byte-stream)))])
 
 (define-serializable procedure [identifier] #:transparent
   #:guard

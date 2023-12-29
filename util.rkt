@@ -13,6 +13,8 @@
   threading
   br/cond)
 
+;; FIXME: With the addition of constraints, there can be multiple new lines in sequence
+;;        and this stupid will not work anymore. Good luck xD
 (define (fix-empty-read-bytes-lines lines)
   (define (fix-one-turn inner-lines)
     (let [(newline-flag #f)]

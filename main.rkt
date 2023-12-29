@@ -23,7 +23,7 @@
 (module+ main
 
   (define field-name (field 0 (type 'VARCHAR 7)))
-  (define field-editor (field 1 (type 'VARCHAR 5)))
+  (define field-editor (field 1 (type 'VARCHAR 9)))
   (define field-year (field 1 (type 'INTEGER 4)))
   (define field-age (field 2 (type 'INTEGER 4)))
 
@@ -42,12 +42,26 @@
               row))
           rows)))
 
+    (define constraint-2
+    #`(lambda [rows]
+        (andmap
+          (lambda [row]
+            (andmap
+              (lambda [raw-field]
+                (let [(raw-name (car raw-field))
+                      (raw-value (cdr raw-field))]
+                  (if (equal? raw-name "EDITOR")
+                    (>= (string-length (stringl-value raw-value)) 5)
+                    #t)))
+              row))
+          rows)))
+
   (define programmer-table
     (table "table" 0
       (make-hash `(("NAME" . ,field-name)
                    ("AGE" . ,field-age)
                    ("EDITOR" . ,field-editor)))
-      (list constraint-1)))
+      (list constraint-1 constraint-2)))
 
   (define car-table
     (table "table" 0
@@ -82,6 +96,7 @@
   (hash-set! schema "PROGRAMMER" programmer-table)
   (write-schema-to-disk schema)
   (set! schema (read-schema-from-disk "schema"))
+  (check-local-constraints (hash-ref schema "PROGRAMMER") (list row1 row2))
   (println schema)
   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
   (println (read-table-values-from-disk schema "PROGRAMMER"))
