@@ -38,9 +38,11 @@
   #:methods gen:serializable
   [(define (serialize self #:size [_size #f])
      (let* [(name-bytes (string->bytes/utf-8 (symbol->string (type-name self))))
-            (name-length (integer->integer-bytes (bytes-length name-bytes) 1 #t))
-            (byte-size-bytes (integer->integer-bytes (type-byte-size self) 4 #t))]
-       (bytes-append name-length name-bytes byte-size-bytes)))
+            (name-length (bytes-length name-bytes))
+            (serialized-name-length (integer->integer-bytes name-length 1 #t))
+            (byte-size-bytes (integer->integer-bytes (type-byte-size self) 4 #t))
+            (payload (bytes-append serialized-name-length name-bytes byte-size-bytes))]
+       (values (bytes-length payload) payload)))
    (define (deserialize _self byte-stream)
      (let* [(name-length (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
             (name-value (~> name-length
@@ -48,8 +50,8 @@
                           (subbytes byte-stream 1 _)
                           bytes->string/utf-8
                           string->symbol))
-            (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length) (+ 3 name-length)) #t))]
-      (values (type name-value byte-size-value) (+ 5 name-length))))])
+            (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length)) #t))]
+      (type name-value byte-size-value)))])
 
 (define-serializable stringl [value] #:transparent
   #:guard
@@ -63,13 +65,14 @@
      (let* [(value (stringl-value self))
             (size-of-string (string-length value))]
        (if (< size size-of-string)
-         (string->bytes/utf-8 (substring value 0 size)) ;; Truncate
-         (let [(dest-bytes (make-bytes size 0))
-               (serialyzed-string (string->bytes/utf-8 value))]
-           (bytes-copy! dest-bytes 0 serialyzed-string)
-           dest-bytes))))
+         (values size (string->bytes/utf-8 (substring value 0 size))) ;; Truncate
+         (let* [(dest-bytes (make-bytes size 0))
+                (serialized-string (string->bytes/utf-8 value))
+                (serialized-string-length (bytes-length serialized-string))]
+           (bytes-copy! dest-bytes 0 serialized-string)
+           (values serialized-string-length dest-bytes)))))
    (define (deserialize _self byte-stream)
-     (values (stringl (string-trim (bytes->string/utf-8 byte-stream)) (bytes-length byte-stream))))])
+     (stringl (string-trim (bytes->string/utf-8 byte-stream))))])
 
 (define-serializable integer32 [value] #:transparent
   #:guard
@@ -78,9 +81,9 @@
     value)
   #:methods gen:serializable
   [(define (serialize self #:size [_size #f])
-     (integer->integer-bytes (integer32-value self) 4 #t))
+     (values 4 (bytes-append (integer->integer-bytes (integer32-value self) 4 #t))))
    (define (deserialize _self byte-stream)
-     (values (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)) 4))])
+     (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)))])
 
 (define-serializable field [position type] #:transparent
   #:guard
@@ -93,15 +96,16 @@
    (define (serialize self #:size [_size #f])
      (let* [(position (field-position self))
             (position-bytes (integer->integer-bytes position 1 #t))
-            (type (field-type self))
-            (type-bytes (super-serialize type #:size (type-byte-size type)))]
-       (bytes-append position-bytes type-bytes)))
+            (type (field-type self))]
+       (define-values (type-size type-bytes) (super-serialize type #:size (type-byte-size type)))
+       (define total-size (+ 1 type-size))
+       (values total-size (bytes-append position-bytes type-bytes))))
    (define/generic super-deserialize deserialize)
    (define (deserialize self byte-stream)
      (let* [(position-value (integer-bytes->integer (make-bytes 1 (bytes-ref byte-stream 0)) #t))
-            (type-bytes (subbytes byte-stream 1))]
-       (define-values [new-type type-consumed] (super-deserialize struct:type type-bytes))
-       (values (field position-value new-type) (+ 1 type-consumed))))])
+            (type-bytes (subbytes byte-stream 1))
+            (new-type (super-deserialize struct:type type-bytes))]
+       (field position-value new-type)))])
 
 (define (fields-size fields)
   (let* [(fields-values (hash-values fields))]
@@ -147,9 +151,12 @@
          (bytes-append serialized-count serialized-constraints)))
      (let* [(row-id (table-row-id self))
             (row-id-bytes (integer->integer-bytes row-id 4 #t))
-            (fields-list (hash->list (table-fields self)))            
-            (constraints (serialize-constraints (table-local-constraints self)))]
-       (bytes-append row-id-bytes constraints (serialize-hash-list fields-list #:entity? #f))))
+            (fields-list (hash->list (table-fields self)))
+            (how-many-fields (integer->integer-bytes (length fields-list) 2 #t))
+            (serialized-fields (serialize-hash-list fields-list))
+            (constraints (serialize-constraints (table-local-constraints self)))
+            (total-size (+ 4 2 (bytes-length constraints) (bytes-length serialized-fields)))]
+       (values total-size (bytes-append row-id-bytes constraints how-many-fields serialized-fields))))
    (define (deserialize self byte-stream)
      (define (utf8-character-as-integer byte-array)
        (call-with-input-bytes
@@ -177,10 +184,12 @@
                (loop (cons constraint-value acc) (- n 1) (+ consumed-bytes constraint-size) (subbytes streamb constraint-size))))))
      (define row-id-value (integer-bytes->integer (subbytes byte-stream 0 4) #t))
      (define-values (constraints-length constraints-value) (deserialize-constraints (subbytes byte-stream 4)))
-     (define fields-value (make-hash (deserialize-hash-list struct:field (subbytes byte-stream (+ 4 constraints-length)) '())))
-     (values
-      (table "table" row-id-value fields-value constraints-value)
-      (bytes-length byte-stream)))])
+     (define-values (_consumed-fields-bytes fields-value)
+       (deserialize-hash-list
+        struct:field
+        (integer-bytes->integer (subbytes byte-stream (+ 4 constraints-length) (+ 6 constraints-length)) #t)
+        (subbytes byte-stream (+ 6 constraints-length))))
+     (table "table" row-id-value (make-immutable-hash fields-value) constraints-value))])
 
 (define-serializable procedure [identifier] #:transparent
   #:guard
@@ -192,7 +201,9 @@
      (procedure-identifier self))]
   #:methods gen:serializable
   [(define (serialize _self #:size [_size #f])
-     (bytes-append (string->bytes/utf-8 "procedures' serialization is not yet implemented")))
+     (let* [(todo-string (string->bytes/utf-8 "procedures' serialization is not yet implemented"))
+            (todo-string-length (bytes-length todo-string))]
+     (values todo-string-length todo-string)))
    (define (deserialize _self byte-stream)
      (println "procedures' deserialization is not yet implemented")
-     (values (procedure "procedure") (bytes-length byte-stream)))])
+     (procedure "procedure"))])
