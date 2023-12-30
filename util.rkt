@@ -5,7 +5,6 @@
   checked-guard
   entity-structs
   define-serializable
-  fix-empty-read-bytes-lines
   bytes-empty?)
 
 (require
@@ -13,32 +12,6 @@
   struct-update
   threading
   br/cond)
-
-;; FIXME: With the addition of constraints, there can be multiple new lines in sequence
-;;        and this stupid will not work anymore. Good luck xD
-(define (fix-empty-read-bytes-lines lines)
-  (define (fix-one-turn inner-lines)
-    (let [(newline-flag #f)]
-      (foldl (lambda [line new-lines]
-               (cond
-                 [newline-flag
-                  (set! newline-flag #f)
-                  (append new-lines (list (bytes-append #"\n" line)))]
-
-                 [(bytes=? #"" line)
-                  (set! newline-flag #t)
-                  new-lines]
-
-                 [else (append new-lines (list line))]))
-        (list) inner-lines)))
-
-  (define (stop-condition lines-to-check)
-    (empty? (filter (curry bytes=? #"") lines-to-check)))
-
-  (while (not (stop-condition lines))
-    (set! lines (fix-one-turn lines)))
-
-  lines)
 
 (define (build-ndf-filename #:data? [data? 'entity] name)
   (let [(path (case (list 'quote data?)
