@@ -20,6 +20,7 @@
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [ 
           just
+          gcc
 
           # Backend and Query Language
           racket 
