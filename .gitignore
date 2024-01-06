@@ -7,3 +7,5 @@ racketowerDB/main
 .DS_Store
 compiled/
 /doc/
+/utilities/*.o
+libbplustree.so
