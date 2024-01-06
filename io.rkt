@@ -19,7 +19,8 @@
            (type (field-type attribute))
            (type-size (type-byte-size type))
            (position (field-position attribute))]
-      (cons position (serialize literal #:size type-size))))
+      (define-values (_literal-size serialized-literal) (serialize literal #:size type-size))
+      (cons position serialized-literal)))
 
   (define (convert-row table row)
     (~>
@@ -66,19 +67,21 @@
          (raise 'tried-update-row-id-with-procedure)])))
 
   (define (write-table-to-disk table table-name)
-    (let* [(serialized-table (serialize table))
-           (file-name (build-ndf-filename table-name))]
-      (call-with-output-file file-name #:exists 'truncate
-        (curry write-bytes serialized-table))
-      (void)))
+    (define-values (_table-size serialized-table) (serialize table))
+    (define filename (build-ndf-filename table-name))
+    (call-with-output-file filename #:exists 'truncate
+      (curry write-bytes serialized-table))
+    (void))
 
   (define (write-schema-to-disk schema)
     (define (write-entity-to-disk file-out entities-list)
-      (let* [(entity-name (give-identifier (cdr (car entities-list))))]
+      (let* [(entity-name (give-identifier (cdr (car entities-list))))
+             (entity-name-length (string-length entity-name))
+             (list-length (length entities-list))]
+        (write-bytes (integer->integer-bytes entity-name-length 1 #t) file-out)
         (write-string entity-name file-out)
-        (newline file-out)
-        (write-bytes (serialize-hash-list entities-list #:entity? #t) file-out)
-        (newline file-out)))
+        (write-bytes (integer->integer-bytes list-length 2 #t) file-out)
+        (write-bytes (serialize-hash-list entities-list) file-out)))
     (let* [(schema-list (hash->list schema))
            (file-name (build-ndf-filename "schema" #:data? 'schema))]
       (call-with-output-file file-name #:exists 'truncate
@@ -94,41 +97,39 @@
     read-table-values-from-disk)
 
   (require
-    RacketowerDB/ast
+   RacketowerDB/ast
+   RacketowerDB/util
     racket/hash)
-
+  
   (define (read-schema-from-disk schema-name)
-    (define (build-hash-from-line struct-instance line-in-bytes)
-      (make-immutable-hash
-        (deserialize-hash-list
-          struct-instance
-          line-in-bytes
-          '())))
-    (define (proceed-reading struct-name current-schema line-in-bytes)
-      (let [(line (bytes->string/utf-8 line-in-bytes))]
-        (if (hash-has-key? entity-structs line)
-          (cons line current-schema)
-          (cons struct-name (hash-union current-schema (build-hash-from-line (hash-ref entity-structs struct-name) line-in-bytes))))))
+    (define (read-entities-from-disk how-many-entities entity-name byte-stream)
+      (define-values (consumed-bytes entities) (deserialize-hash-list
+                                                (hash-ref entity-structs entity-name)
+                                                how-many-entities
+                                                byte-stream))
+      (values (make-immutable-hash entities) (subbytes byte-stream consumed-bytes)))
+    (define (read-block-from-disk byte-stream)
+      (let* [(entity-name-size (integer-bytes->integer (subbytes byte-stream 0 1) #t))
+             (entity-name (bytes->string/utf-8 (subbytes byte-stream 1 (+ 1 entity-name-size))))
+             (how-many-entities (integer-bytes->integer (subbytes byte-stream (+ 1 entity-name-size) (+ 3 entity-name-size)) #t))]
+      (read-entities-from-disk how-many-entities entity-name (subbytes byte-stream (+ 3 entity-name-size)))))
     (let* [(file-name (build-ndf-filename schema-name  #:data? 'schema))
            (in (open-input-file file-name #:mode 'binary))
-           (schema (make-immutable-hash (list)))
-           (real-lines (port->bytes-lines in #:close? #t))
-           (read-lines (fix-empty-read-bytes-lines real-lines))]
-      (~> (foldl
-            (lambda [line-in-bytes acc]
-              (let [(builder-struct (car acc))
-                    (current-schema (cdr acc))]
-                (proceed-reading builder-struct current-schema line-in-bytes)))
-            (cons null schema) read-lines)
-        cdr
+           (content (port->bytes in #:close? #t))]
+      (~> (let loop [(schema (make-immutable-hash (list)))
+                     (byte-array content)]
+            (if (bytes-empty? byte-array)
+                schema
+                (let [] 
+                  (define-values (sub-schema remaining-byte-stream) (read-block-from-disk byte-array))
+                  (loop (hash-union schema sub-schema) remaining-byte-stream))))
         hash->list
         make-hash)))
 
   (define (read-table-from-disk table-name)
     (let* [(file-name (build-ndf-filename #:data? 'entity table-name))
            (in (open-input-file file-name #:mode 'binary))]
-      (define-values (table table-consumed) (deserialize struct:table (port->bytes in #:close? #t)))
-      table))
+      (deserialize struct:table (port->bytes in #:close? #t))))
 
   (define (read-table-values-from-disk schema table-name)
     (let* [(file-name (build-ndf-filename #:data? 'data table-name))
