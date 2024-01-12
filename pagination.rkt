@@ -9,7 +9,7 @@
   (checked-guard
    [(instances . (vectorof bytes?))
     (indexes . (vectorof (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)))]
-    (values instances indexes)))
+   (values instances indexes)))
 
 (struct pager [pages tree amount-read] #:transparent
   #:guard
@@ -17,4 +17,4 @@
    [(pages . (vectorof page?))
     (tree .  cpointer?)
     (amount-read . exact-nonnegative-integer?)]
-    (values pages tree amount-read)))
+   (values pages tree amount-read)))
