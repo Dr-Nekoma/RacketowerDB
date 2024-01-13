@@ -131,41 +131,46 @@
            (in (open-input-file file-name #:mode 'binary))]
       (deserialize struct:table (port->bytes in #:close? #t))))
 
-  (define (read-table-values-from-disk schema table-name)
-    (let* [(file-name (build-ndf-filename #:data? 'data table-name))
-           (in (open-input-file file-name #:mode 'binary))
-           (byte-stream (port->bytes in #:close? #t))
-           (entity (hash-ref schema table-name))]
-      (cond
-        [(table? entity)
-         (define (create-pair key-field) (cons (car key-field) (field-type (cdr key-field))))
-         (define (sort-by-position key-field1 key-field2)
-           (let [(p1 (field-position (cdr key-field1)))
-                 (p2 (field-position (cdr key-field2)))]
-             (< p1 p2)))
-         (define (reconstruct-literal-data accumulator fields sub-byte-stream)
-           (let* [(first-elem (first fields))
-                  (name (car first-elem))
-                  (type (cdr first-elem))
-                  (size (type-byte-size type))
-                  (new-literal (from-bytes type (subbytes sub-byte-stream 0 size)))
-                  (return (append (list (cons name new-literal)) accumulator))
-                  (rest-fields (rest fields))
-                  (remaining-bytes (subbytes sub-byte-stream size (bytes-length sub-byte-stream)))]
-             (if (empty? rest-fields)
+  ;; TODO: This function should account for eventual errors LOL
+  (define (read-table-values-from-disk schema table-name #:source [source #""])
+    (define file-name (build-ndf-filename #:data? 'data table-name))
+    (define byte-stream
+      (if (bytes-empty? source)
+          (port->bytes (open-input-file file-name #:mode 'binary) #:close? #t)
+          source))
+    ;; TODO: This validation should be done in the caller
+    (define entity (hash-ref schema table-name))    
+    (cond
+      [(table? entity)
+       (define (create-pair key-field) (cons (car key-field) (field-type (cdr key-field))))
+       (define (sort-by-position key-field1 key-field2)
+         (let [(p1 (field-position (cdr key-field1)))
+               (p2 (field-position (cdr key-field2)))]
+           (< p1 p2)))
+       (define (reconstruct-literal-data accumulator fields sub-byte-stream)
+         (let* [(first-elem (first fields))
+                (name (car first-elem))
+                (type (cdr first-elem))
+                (size (type-byte-size type))
+                (new-literal (from-bytes type (subbytes sub-byte-stream 0 size)))
+                (return (append (list (cons name new-literal)) accumulator))
+                (rest-fields (rest fields))
+                (remaining-bytes (subbytes sub-byte-stream size (bytes-length sub-byte-stream)))]
+           (if (empty? rest-fields)
                (cons return remaining-bytes)
                (reconstruct-literal-data return rest-fields remaining-bytes))))
-         (define (reconstruct-all-literals accumulator fields inner-byte-stream)
-           (let* [(one-line (reconstruct-literal-data (list) fields inner-byte-stream))
-                  (computed-line (list (car one-line)))
-                  (remaining-bytes (cdr one-line))
-                  (return (append accumulator computed-line))]
-             (if (bytes=? #"" remaining-bytes)
+       (define (reconstruct-all-literals accumulator fields inner-byte-stream)
+         (let* [(one-line (reconstruct-literal-data (list) fields inner-byte-stream))
+                (computed-line (list (car one-line)))
+                (remaining-bytes (cdr one-line))
+                (return (append accumulator computed-line))]
+           (if (bytes=? #"" remaining-bytes)
                return
                (reconstruct-all-literals return fields remaining-bytes))))
-         (~>
-           (hash->list (table-fields entity))
-           (sort _ sort-by-position)
-           (map create-pair _)
-           (reconstruct-all-literals (list) _ byte-stream))]
-        [(procedura? entity) (raise 'tried-deserialize-procedure-in-table-function)]))))
+       (~>
+        (hash->list (table-fields entity))
+        (sort _ sort-by-position)
+        (map create-pair _)
+        (reconstruct-all-literals (list) _ byte-stream)
+        (map make-hash _))]
+      [(procedura? entity) (raise 'tried-deserialize-procedure-in-table-function)])))
