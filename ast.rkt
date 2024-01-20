@@ -4,6 +4,7 @@
   check-local-constraints
   (struct+updaters-out table)
   fields-size
+  table-row-size
   (struct+updaters-out procedure)
   (struct+updaters-out field)
   (struct+updaters-out integer32)
@@ -85,6 +86,10 @@
    (define (deserialize _self byte-stream)
      (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)))])
 
+(define (field-size field)
+  (let [(type (field-type field))]
+    (type-byte-size type)))
+
 (define-serializable field [position type] #:transparent
   #:guard
   (checked-guard
@@ -119,6 +124,10 @@
     (andmap (lambda [constraint]
               ((eval-syntax constraint) rows))
       constraints)))
+
+(define (table-row-size table)
+  (let [(fields (hash-values (table-fields table)))]
+    (foldl (lambda (field acc) (+ acc (field-size field))) 0 fields)))
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent

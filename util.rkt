@@ -5,7 +5,9 @@
   checked-guard
   entity-structs
   define-serializable
-  bytes-empty?)
+  bytes-empty?
+  split-by
+  take-up-to)
 
 (require
   (for-syntax threading racket/syntax racket/list)
@@ -56,6 +58,17 @@
 
 (define (bytes-empty? byte-stream)
   (equal? #"" byte-stream))
+
+(define (split-by lst n)
+   (if (not (empty? lst))
+       (cons (take lst n) (split-by (drop lst n) n))
+       '()))
+
+(define (take-up-to l n)
+  (let [(size (length l))]
+    (if (> size n)
+        (take l n)
+        (take l size))))
 
 (module interfaces racket
   (provide

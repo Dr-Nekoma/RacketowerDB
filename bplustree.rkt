@@ -3,7 +3,8 @@
 (require ffi/unsafe
          ffi/unsafe/define)
 
-(provide tree-test)
+(provide insert
+	 find_and_get_value)
  
 (define-ffi-definer define-bplustree (ffi-lib "libbplustree"))
 

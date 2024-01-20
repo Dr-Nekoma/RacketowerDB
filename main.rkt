@@ -90,16 +90,16 @@
 
   (define row4
     `(("MODEL" . ,(stringl "Abc"))
-      ("YEAR" . ,(integer32 2013))))
+      ("YEAR" . ,(integer32 1997))))
 
   (hash-set! schema "PROGRAMMER" programmer-table)
+  (hash-set! schema "CAR" car-table)
+  (set! schema (write-rows-to-disk schema "CAR" (list row3 row4)))
   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
   ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
-  (define-values (pages amount-already-read) (build-pages 0 1 1 (+ 7 10 4) 0 "AGE" schema "PROGRAMMER"))
-  (println pages)
-  (println amount-already-read)
+  ;; (define-values (pages amount-already-read) (build-pages 0 1 1 (+ 7 10 4) 0 "AGE" schema "PROGRAMMER"))  
+  (println (search schema (query "CAR" "YEAR" 1999)))
   ;; (check-local-constraints programmer-table (list row1 row2))
-  ;; (hash-set! schema "CAR" car-table)
   ;; (hash-set! schema "TEST" procedure-test)
   ;; (write-schema-to-disk schema)
   ;; (set! schema (read-schema-from-disk "schema"))
@@ -110,7 +110,8 @@
   ;;   (hash-set! schema "PROGRAMMER" read-table)
   ;;   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
   ;;   (println schema))
-  (tree-test))
+  ;; (tree-test)
+  )
 
   ;;(exit-handler)
   ;;(server-entrypoint)
