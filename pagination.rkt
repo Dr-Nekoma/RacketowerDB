@@ -45,7 +45,7 @@
    (values initial-page-number page-bytesize instances-per-page* chunk-size instance-size* amount-already-read)))
 (define-struct-updaters tailor)
 
-(define default-page-bytesize 8000)
+(define default-page-bytesize 11)
 (define default-max-pages-at-once 64)
 (define default-chunk-size (* default-max-pages-at-once default-page-bytesize))
 (define default-tailor (tailor 0 default-page-bytesize false default-chunk-size false 0))
@@ -93,7 +93,7 @@
     (let loop [(amount-already-read amount-already-read)
                (page-offset initial-page-number)
                (pages (list))]
-      (if (< page-offset chunk-size)
+      (if (< amount-already-read (min chunk-size content-length))
           (begin
             (file-position reader (* page-offset instance-size))
             (let* [(amount-to-read (if (> (* instances-per-page instance-size) (- content-length amount-already-read))
@@ -141,9 +141,12 @@
          (if (= -1 index)
              (println "Did not find your thing buddy xD")
              ;; TODO: We should generalize this to not just use the first page
-             (let* [(pages (pager-pages pager))
-                    (first-page (car pages))
-                    (instances (page-instances first-page))
-                    (payload (list->bytes (list-ref instances index)))]
-               (read-table-values-from-disk schema entity-name #:source payload))))]
+             (foldl (lambda [page search-results]
+                      (println (pager-pages pager))
+                      (println index)
+                      (let* [(instances (page-instances page))
+                             (payload (list->bytes (list-ref instances index)))
+                             (value (read-table-values-from-disk schema entity-name #:source payload))]
+                        (append value search-results)))
+                    (list) (pager-pages pager))))]
       [else (println "Did not find the entity name")])))
