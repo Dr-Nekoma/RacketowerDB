@@ -7,6 +7,9 @@ bplustree:
 build:
 	raco exe --gui main.rkt
 
+run: build bplustree
+	./main
+
 install:
 	raco pkg install
 
