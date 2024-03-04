@@ -37,35 +37,44 @@
     (indexes . (listof index?))]
    (values instances indexes)))
 
-(struct tailor [initial-page-number page-bytesize instances-per-page chunk-size instance-size amount-already-read] #:transparent
+(struct tailor [initial-page-number page-bytesize instances-per-page chunk-size current-chunk instance-size amount-already-read] #:transparent
   #:guard
   (checked-guard
    [(initial-page-number . exact-nonnegative-integer?)
     (page-bytesize . exact-nonnegative-integer?)
     (instances-per-page . (or/c #f exact-nonnegative-integer?))
     (chunk-size . exact-nonnegative-integer?)
+    (current-chunk . exact-nonnegative-integer?)
     (instance-size . (or/c #f exact-nonnegative-integer?))
     (amount-already-read . exact-nonnegative-integer?)]
    (define instances-per-page* (or instances-per-page (and instance-size (quotient page-bytesize instance-size))))
    (when (and instances-per-page (not (equal? instances-per-page instances-per-page*)))
-              (raise-argument-error 'tailor "Instances per page and Instance Size are not proportional."
-                                    "Page Bytesize:" page-bytesize
-                                    "Instances Per Page:" instances-per-page
-                                    "Instance Size:" instance-size))
+     (raise-argument-error 'tailor "Instances per page and Instance Size are not proportional."
+                           "Page Bytesize:" page-bytesize
+                           "Instances Per Page:" instances-per-page
+                           "Instance Size:" instance-size))
    (define instance-size* (or instance-size (and instances-per-page (quotient page-bytesize instances-per-page))))
    (when (and instance-size (not (equal? instance-size instance-size*)))
-              (raise-argument-error 'tailor "Instances per page and Instance Size are not proportional."
-                                    "Page Bytesize:" page-bytesize
-                                    "Instances Per Page:" instances-per-page
-                                    "Instance Size:" instance-size))     
-   (values initial-page-number page-bytesize instances-per-page* chunk-size instance-size* amount-already-read)))
+     (raise-argument-error 'tailor "Instances per page and Instance Size are not proportional."
+                           "Page Bytesize:" page-bytesize
+                           "Instances Per Page:" instances-per-page
+                           "Instance Size:" instance-size))
+   (values
+     initial-page-number
+     page-bytesize
+     instances-per-page*
+     chunk-size
+     current-chunk
+     instance-size*
+     amount-already-read)))
+
 (define-struct-updaters tailor)
 
 (define default-page-bytesize 11)
 (define default-max-pages-at-once 64)
 (define default-chunk-size (* default-max-pages-at-once default-page-bytesize))
 (define initial-chunk-number 0)
-(define default-tailor (tailor 0 default-page-bytesize false default-chunk-size false 0))
+(define default-tailor (tailor 0 default-page-bytesize false default-chunk-size 0 false 0))
 
 (struct query [entity-name attribute-to-index attribute-value] #:transparent
   #:guard
@@ -102,7 +111,7 @@
         (instances-per-page (tailor-instances-per-page tailor))
         ;; TODO: Loop over all the remaining chunks
         (chunk-size (tailor-chunk-size tailor))
-        (chunk-number initial-chunk-number)
+        (chunk-number (tailor-current-chunk tailor))
         (instance-size (tailor-instance-size tailor))
         (amount-already-read (tailor-amount-already-read tailor))]
 
@@ -145,7 +154,10 @@
                (+ amount-already-read amount-to-read)
                (+ instances-per-page page-offset)
                (append pages (create-pages buffer instance-size instances-per-page)))))
-          (values pages (tailor-amount-already-read-set tailor amount-already-read))))))
+          (values pages
+                  (~> tailor
+                      (tailor-amount-already-read-set amount-already-read)
+                      (tailor-current-chunk-update add1)))))))
 
 (define (build-pagination schema query tailor)
   (define (create-b-plus-tree pages)
@@ -156,7 +168,7 @@
                              (chunk-number (row-id-chunk-number row-id))
                              (page-number (row-id-page-number row-id))
                              (slot-number (row-id-slot-number row-id))]
-                      (insert tree key chunk-number page-number slot-number)))
+                        (insert tree key chunk-number page-number slot-number)))
                     tree (page-indexes page)))
            false pages))
   (let* [(entity (hash-ref schema (query-entity-name query)))
