@@ -4,18 +4,26 @@
          ffi/unsafe/define)
 
 (provide insert
-	 find_and_get_value)
- 
+	 find_and_get_value
+	 find_and_get_node
+	 _NODE
+	 _RECORD
+	 _RECORD-pointer
+	 RECORD->list)
+
+(define-cstruct _RECORD ([chunkNumber _int]
+                         [pageNumber _int]
+                         [slotNumber _int]))
+
+(define-cstruct _NODE ([pointers _pointer]
+                       [keys _pointer]
+                       [parent _pointer]
+		       [is_leaf _bool]
+		       [num_keys _int]
+		       [next _pointer]))
+
 (define-ffi-definer define-bplustree (ffi-lib "libbplustree"))
 
-(define-bplustree print_leaves (_fun _pointer -> _void))
-
-(define-bplustree insert (_fun _pointer _int _int -> _pointer))
-(define-bplustree find_and_print (_fun _pointer _int _bool -> _void))
-(define-bplustree find_and_get_value (_fun _pointer _int _bool -> _int))
-
-(define (tree-test)
-  (let* [(tree (insert false 1 10))
-         (tree2 (insert tree 2 11))
-         (tree3 (insert tree2 3 12))]
-    (print_leaves tree3)))
+(define-bplustree insert (_fun _pointer _int _int _int _int -> _pointer))
+(define-bplustree find_and_get_value (_fun _pointer _int _bool -> _pointer))
+(define-bplustree find_and_get_node (_fun _pointer _int _pointer -> _pointer))
