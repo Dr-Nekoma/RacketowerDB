@@ -36,11 +36,10 @@
    [(indexes . (listof index?))]
    (values indexes)))
 
-(struct tailor [initial-page-number page-bytesize instances-per-page chunk-size instance-size amount-already-read] #:transparent
+(struct tailor [page-bytesize instances-per-page chunk-size instance-size amount-already-read] #:transparent
   #:guard
   (checked-guard
-   [(initial-page-number . exact-nonnegative-integer?)
-    (page-bytesize . exact-nonnegative-integer?)
+   [(page-bytesize . exact-nonnegative-integer?)
     (instances-per-page . (or/c #f exact-nonnegative-integer?))
     (chunk-size . exact-nonnegative-integer?)
     (instance-size . (or/c #f exact-nonnegative-integer?))
@@ -58,7 +57,6 @@
                            "Instances Per Page:" instances-per-page
                            "Instance Size:" instance-size))
    (values
-     initial-page-number
      page-bytesize
      instances-per-page*
      chunk-size
@@ -67,10 +65,10 @@
 
 (define-struct-updaters tailor)
 
-(define default-page-bytesize 22)
+(define default-page-bytesize 11)
 (define default-pages-per-chunk 2)
 (define default-chunk-size (* default-pages-per-chunk default-page-bytesize))
-(define default-tailor (tailor 0 default-page-bytesize false default-chunk-size false 0))
+(define default-tailor (tailor default-page-bytesize false default-chunk-size false 0))
 
 (struct query [entity-name attribute-to-index attribute-value] #:transparent
   #:guard
@@ -127,7 +125,6 @@
 
 (define (build-chunks schema query tailor)  
   (let [(entity-name (query-entity-name query))
-        (initial-page-number (tailor-initial-page-number tailor))
         (instances-per-page (tailor-instances-per-page tailor))
         (chunk-size (tailor-chunk-size tailor))
         (instance-size (tailor-instance-size tailor))
@@ -144,14 +141,13 @@
     
     ;; This loops over the file using a file descriptor and amount already read
     (let loop [(amount-already-read amount-already-read)
-               (page-offset initial-page-number)
                (current-chunk-number 0)
                (chunks (list))]
       ;; This checks if we can continue. What if we have less content than a chunk size?
       (if (< amount-already-read content-length)
           (begin
             ;; Moving file descriptor to position
-            (file-position reader (* page-offset instance-size))
+            (file-position reader amount-already-read)
 
             ;; Calculates how many more bytes we should read
             (let* [(amount-to-read (derive-to-read-bytes content-length amount-already-read))
@@ -161,7 +157,6 @@
               ;; Loops updating the amount already read, the offset, chunk number, and append new created pages
               (loop
                (+ amount-already-read amount-to-read)
-               (+ instances-per-page page-offset)
                (add1 current-chunk-number)
                (cons pages chunks))))
           ;; We are done with this file bud xD
@@ -185,9 +180,12 @@
          (instance-size (table-row-size entity))
          (new-tailor (tailor-instance-size-set tailor instance-size))]
     (define chunks (build-chunks schema query new-tailor))
+    (define tree (create-b-plus-tree chunks))    
+    (println chunks)
+    (print_leaves tree)
     (pager
      chunks
-     (create-b-plus-tree chunks)
+     tree
      new-tailor)))
 
 (define (convert-leaves ptr size) (ptr-ref ptr (_array/vector _RECORD-pointer size)))
