@@ -65,8 +65,8 @@
 
 (define-struct-updaters tailor)
 
-(define default-page-bytesize 11)
-(define default-pages-per-chunk 1)
+(define default-page-bytesize 22)
+(define default-pages-per-chunk 2)
 (define default-chunk-size (* default-pages-per-chunk default-page-bytesize))
 (define default-tailor (tailor default-page-bytesize false default-chunk-size false 0))
 
@@ -180,9 +180,10 @@
          (instance-size (table-row-size entity))
          (new-tailor (tailor-instance-size-set tailor instance-size))]
     (define chunks (build-chunks schema query new-tailor))
-    (define tree (create-b-plus-tree chunks))    
+    (define tree (create-b-plus-tree chunks))
     (println chunks)
-    (print_leaves tree)
+    ;; (print_leaves tree)
+    (print_tree tree)    
     (pager
      chunks
      tree
@@ -222,6 +223,7 @@
               (how-many-leaves (ptr-ref how-many-leaves-ptr _int))
               (leaves (convert-leaves leaves-ptr how-many-leaves))]
          ;; (println leaves)
+         (println how-many-leaves)
          (unless (= 0 how-many-leaves)
            (foldl (lambda [row-id search-results]
                     (append
