@@ -66,7 +66,7 @@
 (define-struct-updaters tailor)
 
 (define default-page-bytesize 11)
-(define default-pages-per-chunk 2)
+(define default-pages-per-chunk 1)
 (define default-chunk-size (* default-pages-per-chunk default-page-bytesize))
 (define default-tailor (tailor default-page-bytesize false default-chunk-size false 0))
 
@@ -164,17 +164,17 @@
 
 (define (build-pagination schema query tailor)
   (define (create-b-plus-tree chunks)
-    (foldl (lambda (pages tree)
-             (foldl (lambda (page tree)
-                      (foldl (lambda (element tree)
+    (foldl (lambda (pages tree1)
+             (foldl (lambda (page tree2)
+                      (foldl (lambda (element tree3)
                                (let* [(key (index-key element))
                                       (row-id (index-row-id element))
                                       (chunk-number (row-id-chunk-number row-id))
                                       (page-number (row-id-page-number row-id))
                                       (slot-number (row-id-slot-number row-id))]
-                                 (insert tree key chunk-number page-number slot-number)))
-                             tree (page-indexes page)))
-                    false pages))
+                                 (insert tree3 key chunk-number page-number slot-number)))
+                             tree2 (page-indexes page)))
+                    tree1 pages))
            false chunks))
   (let* [(entity (hash-ref schema (query-entity-name query)))
          (instance-size (table-row-size entity))
