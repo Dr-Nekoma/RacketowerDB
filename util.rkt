@@ -7,7 +7,8 @@
   define-serializable
   bytes-empty?
   split-by
-  take-up-to)
+  take-up-to
+  chunk-by-size)
 
 (require
   (for-syntax threading racket/syntax racket/list)
@@ -22,6 +23,17 @@
                 [('data) "ndf/data/"]
                 [else (raise 'error-not-specified-datatype)]))]
     (string-append path (string-append name ".ndf"))))
+
+(define (chunk-by-size chunk-size elements)
+    (let recur [(n chunk-size)
+                (chunk '())
+                (elements elements)]
+      (cond
+       ((empty? elements) (if (empty? chunk)
+                            '()
+                            (list (reverse chunk))))
+       ((zero? n) (cons (reverse chunk) (chunk-by-size chunk-size elements)))
+       (else (recur (sub1 n) (cons (car elements) chunk) (cdr elements))))))
 
 (define entity-structs (make-hash (list)))
 

@@ -4,7 +4,7 @@
  ffi/unsafe
  struct-update
  threading
- (only-in RacketowerDB/util checked-guard build-ndf-filename split-by take-up-to) 
+ (only-in RacketowerDB/util checked-guard build-ndf-filename split-by take-up-to chunk-by-size) 
  (submod RacketowerDB/io reader)
  RacketowerDB/bplustree
  RacketowerDB/ast)
@@ -30,12 +30,11 @@
     (row-id . row-id?)]
    (values key columns row-id)))
 
-(struct page [instances indexes] #:transparent
+(struct page [indexes] #:transparent
   #:guard
   (checked-guard
-   [(instances . (listof hash?))
-    (indexes . (listof index?))]
-   (values instances indexes)))
+   [(indexes . (listof index?))]
+   (values indexes)))
 
 (struct tailor [initial-page-number page-bytesize instances-per-page chunk-size current-chunk instance-size amount-already-read] #:transparent
   #:guard
@@ -73,7 +72,6 @@
 (define default-page-bytesize 11)
 (define default-max-pages-at-once 64)
 (define default-chunk-size (* default-max-pages-at-once default-page-bytesize))
-(define initial-chunk-number 0)
 (define default-tailor (tailor 0 default-page-bytesize false default-chunk-size 0 false 0))
 
 (struct query [entity-name attribute-to-index attribute-value] #:transparent
@@ -85,102 +83,105 @@
    (values entity-name attribute-to-index attribute-value)))
 (define-struct-updaters query)
 
-(struct pager [pages tree tailor] #:transparent
+(struct pager [chunks tree tailor] #:transparent
   #:guard
   (checked-guard
-   [(pages . (listof page?))
+   [(chunks . (listof (listof page?)))
     (tree .  cpointer?)
     (tailor . tailor?)]
-   (values pages tree tailor)))
+   (values chunks tree tailor)))
 
-(define (chunk-by-size chunk-size elements)
-    (let recur [(n chunk-size)
-                (chunk '())
-                (elements elements)]
-      (cond
-       ((empty? elements) (if (empty? chunk)
-                            '()
-                            (list (reverse chunk))))
-       ((zero? n) (cons (reverse chunk) (chunk-by-size chunk-size elements)))
-       (else (recur (sub1 n) (cons (car elements) chunk) (cdr elements))))))
-
-(define (build-pages schema query tailor)
+(define (build-pages schema query tailor list-buffer current-chunk-number)
   (let [(entity-name (query-entity-name query))
         (attribute-to-index (query-attribute-to-index query))
+        (instances-per-page (tailor-instances-per-page tailor))
+        (instance-size (tailor-instance-size tailor))
+        (chunk-size (tailor-chunk-size tailor))]
+    (define (index-builder chunk-number page-number instance-number columns)
+      ;; TODO: Improve error message if attribute to index is not in the columns
+      (~> (hash-ref columns attribute-to-index (lambda () #f)) 
+          ;; TODO: Leave an error message to only work on the supported types.
+          integer32-value
+          (index _ columns (row-id chunk-number page-number instance-number))))
+    (define raw-pages
+      (~> list-buffer
+          (chunk-by-size instance-size _)
+          (chunk-by-size instances-per-page _)))
+    (for/list [(page-number (in-naturals))
+               (instances raw-pages)]
+      (define indexing
+        (for/list [(instance-number (in-naturals))
+                   (instance instances)]
+          (~> (read-table-values-from-disk schema entity-name #:source (list->bytes instance))
+              car
+              (index-builder current-chunk-number page-number instance-number _))))
+      (page indexing))))
+
+(define (build-chunks schema query tailor)
+  (define (derive-to-read-bytes instance-size instances-per-page content-length amount-already-read)
+    (if (> (* instances-per-page instance-size) (- content-length amount-already-read))
+        (- content-length amount-already-read)
+        (* instances-per-page instance-size)))
+  
+  (let [(entity-name (query-entity-name query))
         (initial-page-number (tailor-initial-page-number tailor))
         (instances-per-page (tailor-instances-per-page tailor))
-        ;; TODO: Loop over all the remaining chunks
         (chunk-size (tailor-chunk-size tailor))
-        (chunk-number (tailor-current-chunk tailor))
         (instance-size (tailor-instance-size tailor))
         (amount-already-read (tailor-amount-already-read tailor))]
-
-    (define (index-builder chunk-number page-number instance-number columns)
-      (~> (hash-ref columns (query-attribute-to-index query) (lambda () #f))
-          integer32-value ;; TODO: Leave an error message to only work on the supported types.
-          (index _ columns (row-id chunk-number page-number instance-number))))
-    (define (create-pages buffer instance-size instances-per-page)
-      (define raw-pages
-        (~> buffer
-            (chunk-by-size instance-size _)
-            (chunk-by-size instances-per-page _)))
-      (define pages
-        (for/list [(page-number (in-naturals))
-                   (instances raw-pages)]
-          (define indexing
-            (for/list [(instance-number (in-naturals))
-                       (instance instances)]
-              (~> (read-table-values-from-disk schema entity-name #:source (list->bytes instance))
-                  car
-                  (index-builder chunk-number page-number instance-number _))))
-          (page (map (lambda (index) (index-columns index)) indexing)
-                indexing)))
-      (println pages)
-      pages)
+    
     (define file-name (build-ndf-filename entity-name #:data? 'data))
     (define content-length (file-size file-name))
     (define reader (open-input-file file-name #:mode 'binary))
+    
+    ;; This loops over the file using a file descriptor and amount already read
     (let loop [(amount-already-read amount-already-read)
                (page-offset initial-page-number)
-               (pages (list))]
+               (current-chunk-number 0)
+               (chunks (list))]
+      ;; This checks if we can continue. What if we have less content than a chunk size? 
       (if (< amount-already-read (min chunk-size content-length))
           (begin
+            ;; Moving file descriptor to position
             (file-position reader (* page-offset instance-size))
-            (let* [(amount-to-read (if (> (* instances-per-page instance-size) (- content-length amount-already-read))
-                                       (- content-length amount-already-read)
-                                       (* instances-per-page instance-size)))
-                   (buffer (bytes->list (read-bytes amount-to-read reader)))]
+
+            ;; Calculates how many more bytes we should read
+            (let* [(amount-to-read (derive-to-read-bytes instance-size instances-per-page content-length amount-already-read))
+                   ;; Read new amount
+                   (pages-buffer (bytes->list (read-bytes amount-to-read reader)))
+                   (pages (build-pages schema query tailor pages-buffer current-chunk-number))]
+              (println pages)
+              ;; Loops updating the amount already read, the offset, chunk number, and append new created pages
               (loop
                (+ amount-already-read amount-to-read)
                (+ instances-per-page page-offset)
-               (append pages (create-pages buffer instance-size instances-per-page)))))
-          (values pages
-                  (~> tailor
-                      (tailor-amount-already-read-set amount-already-read)
-                      (tailor-current-chunk-update add1)))))))
+               (add1 current-chunk-number)
+               (cons pages chunks))))
+          ;; We are done with this file bud xD
+          chunks))))
 
 (define (build-pagination schema query tailor)
-  (define (create-b-plus-tree pages)
-    (foldl (lambda (page tree)
-             (foldl (lambda (element tree)
-                      (let* [(key (index-key element))
-                             (row-id (index-row-id element))
-                             (chunk-number (row-id-chunk-number row-id))
-                             (page-number (row-id-page-number row-id))
-                             (slot-number (row-id-slot-number row-id))]
-                        (insert tree key chunk-number page-number slot-number)))
-                    tree (page-indexes page)))
-           false pages))
+  (define (create-b-plus-tree chunks)
+    (foldl (lambda (pages tree)
+             (foldl (lambda (page tree)
+                      (foldl (lambda (element tree)
+                               (println element)
+                               (let* [(key (index-key element))
+                                      (row-id (index-row-id element))
+                                      (chunk-number (row-id-chunk-number row-id))
+                                      (page-number (row-id-page-number row-id))
+                                      (slot-number (row-id-slot-number row-id))]
+                                 (insert tree key chunk-number page-number slot-number)))
+                             tree (page-indexes page)))
+                    false pages))
+           false chunks))
   (let* [(entity (hash-ref schema (query-entity-name query)))
-         (instance-size (table-row-size entity))]
-    (define-values (pages new-tailor)
-      (build-pages
-       schema
-       query
-       (tailor-instance-size-set tailor instance-size)))
+         (instance-size (table-row-size entity))
+         (new-tailor (tailor-instance-size-set tailor instance-size))]
+    (define chunks (build-chunks schema query new-tailor))
     (pager
-     pages
-     (create-b-plus-tree pages)
+     chunks
+     (create-b-plus-tree chunks)
      new-tailor)))
 
 (define (convert-leaves ptr size)
