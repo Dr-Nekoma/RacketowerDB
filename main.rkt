@@ -77,7 +77,7 @@
   (define row1
     `(("NAME" . ,(stringl "Nathan"))
       ("EDITOR" . ,(stringl "Visual Studio Code"))
-      ("AGE" . ,(integer32 123))))
+      ("AGE" . ,(integer32 100))))
 
   (define row2
     `(("NAME" . ,(stringl "Lemos"))
@@ -126,7 +126,7 @@
   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
   ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
   ;; (define-values (pages amount-already-read) (build-pages 0 1 1 (+ 7 10 4) 0 "AGE" schema "PROGRAMMER"))  
-  (println (search schema (query "CAR" "YEAR" 1996)))
+  (println (search schema (query "PROGRAMMER" "AGE" 100)))
   ;; (check-local-constraints programmer-table (list row1 row2))
   ;; (hash-set! schema "TEST" procedure-test)
   ;; (write-schema-to-disk schema)

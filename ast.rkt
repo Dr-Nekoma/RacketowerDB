@@ -138,21 +138,21 @@
       [(procedure? entity)
        (error "Don't write procedures yet")])))
 
-(define (table-column-value table column-name)
+(define (table-column-value table table-name column-name)
   (define (column-name-message column-name)
-      (error (format "Could not find column \"~s\" in table fields" column-name)))
+      (error (format "Could not find column ~s in table fields of table ~s" column-name table-name)))
 
   (let* [(column-field (hash-ref (table-fields table) column-name (lambda () (column-name-message column-name))))
          (field-type (field-type column-field))
          (name (type-name field-type))]
     (case name
       [[INTEGER] integer32-value]
-      [[VARCHAR] stringl-value]
+      [[VARCHAR] (error "TODO: We only support integers for now and you asked for a string bud xD")]
       [else (error (format "Could not find type ~a in table's fields: ~a" name (table-fields table)))])))
 
 (define (extract-value schema table-name column-name)
   (~> (lookup-table-in-schema schema table-name)
-      (table-column-value _ column-name)))
+      (table-column-value _ table-name column-name)))
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent
