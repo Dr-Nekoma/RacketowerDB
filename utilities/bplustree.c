@@ -440,8 +440,10 @@ extern /*int*/ record *find_and_get_value(node *const root, int key,
 extern record **find_and_get_node(node *const root, int key, int *size) {
 
   head *head = find_node(root, key);
-  if (head->initial_node == NULL)
+  if (head == NULL) {
+    *size = 0;
     return NULL;
+  }
   
   node *n = head->initial_node;
   int counter = 0, i = head->position;
@@ -454,17 +456,14 @@ extern record **find_and_get_node(node *const root, int key, int *size) {
   }
   
   *size = counter;
-  printf("Counter: %d\n", counter);
   record** result = malloc(sizeof(record*)*(*size));
 
   counter = 0; i = head->position; n = head->initial_node;
-  printf("Position: %d\n", i);
   
   // Saving values into the output array of pointers
   while (n != NULL) {
     for (; i < n->num_keys && n->keys[i] == key; i++, counter++) {
       record *temp = n->pointers[i];
-      printf("CN: %d, PN: %d, SN: %d NK: %d\n", temp->chunkNumber, temp->pageNumber, temp->slotNumber, n->num_keys);
       result[counter] = n->pointers[i];
     }
     n = n->pointers[order - 1];
@@ -549,7 +548,7 @@ extern node *find_leaf(node *const root, int key, bool verbose) {
     }
     i = 0;
     while (i < c->num_keys) {
-      if (key >= c->keys[i])
+      if (key > c->keys[i])
         i++;
       else
         break;
@@ -615,12 +614,12 @@ head *find_node(node *root, int key) {
     if (leaf->keys[i] == key)
       break;
 
-  if (i == leaf->num_keys)
+  if (i == leaf->num_keys) {
     return NULL;
-  else {
-	head* result = malloc(sizeof(head));
-	result->initial_node = leaf;
-	result->position = i;
+  } else {
+    head* result = malloc(sizeof(head));
+    result->initial_node = leaf;
+    result->position = i;
     return result;
   }
 }

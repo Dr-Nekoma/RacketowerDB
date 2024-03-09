@@ -114,7 +114,7 @@
 
   (define row10
     `(("MODEL" . ,(stringl "Tesla"))
-      ("YEAR" . ,(integer32 1997))))
+      ("YEAR" . ,(integer32 2020))))
 
   (define row11
     `(("MODEL" . ,(stringl "Honda"))
@@ -126,7 +126,7 @@
   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
   ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
   ;; (define-values (pages amount-already-read) (build-pages 0 1 1 (+ 7 10 4) 0 "AGE" schema "PROGRAMMER"))  
-  (println (search schema (query "CAR" "YEAR" 1997)))
+  (println (search schema (query "CAR" "YEAR" 1996)))
   ;; (check-local-constraints programmer-table (list row1 row2))
   ;; (hash-set! schema "TEST" procedure-test)
   ;; (write-schema-to-disk schema)

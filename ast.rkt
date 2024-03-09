@@ -5,6 +5,8 @@
   (struct+updaters-out table)
   fields-size
   table-row-size
+  extract-value
+  lookup-table-in-schema
   (struct+updaters-out procedure)
   (struct+updaters-out field)
   (struct+updaters-out integer32)
@@ -128,6 +130,29 @@
 (define (table-row-size table)
   (let [(fields (hash-values (table-fields table)))]
     (foldl (lambda (field acc) (+ acc (field-size field))) 0 fields)))
+
+(define (lookup-table-in-schema schema table-name function . args)
+  (let [(entity (hash-ref schema table-name))]
+    (cond
+      [(table? entity)
+       (apply function entity args)]
+      [(procedure? entity)
+       (error "Don't write procedures yet")])))
+
+(define (table-column-value table column-name)
+  (define (column-name-message column-name)
+      (error (format "Could not find column \"~s\" in table fields" column-name)))
+
+  (let* [(column-field (hash-ref (table-fields table) column-name (lambda () (column-name-message column-name))))
+         (field-type (field-type column-field))
+         (name (type-name field-type))]
+    (case name
+      [[INTEGER] integer32-value]
+      [[VARCHAR] stringl-value]
+      [else (error (format "Could not find type ~a in table's fields: ~a" name (table-fields table)))])))
+
+(define (extract-value schema table-name column-name)
+  (lookup-table-in-schema schema table-name table-column-value column-name))
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent

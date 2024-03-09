@@ -25,7 +25,7 @@
 (struct index [key columns row-id] #:transparent
   #:guard
   (checked-guard
-   [(key . exact-nonnegative-integer?) ; This should be generic later on
+   [(key . exact-nonnegative-integer?)
     (columns . hash?)
     (row-id . row-id?)]
    (values key columns row-id)))
@@ -65,7 +65,7 @@
 
 (define-struct-updaters tailor)
 
-(define default-page-bytesize 22)
+(define default-page-bytesize 42)
 (define default-pages-per-chunk 2)
 (define default-chunk-size (* default-pages-per-chunk default-page-bytesize))
 (define default-tailor (tailor default-page-bytesize false default-chunk-size false 0))
@@ -98,9 +98,8 @@
     
     ;; Create an index from the deserialized data alongide row-id
     (define (index-builder chunk-number page-number instance-number columns)
-      (~> (hash-ref columns attribute-to-index (lambda () (attribute-error-message columns))) 
-          ;; TODO: Leave an error message to only work on the supported types.
-          integer32-value
+      (~> (hash-ref columns attribute-to-index (lambda () (attribute-error-message columns)))
+          ((extract-value schema entity-name attribute-to-index))
           (index _ columns (row-id chunk-number page-number instance-number))))
     
     ;; We create a list of pages, each page with a list of instances
@@ -124,21 +123,22 @@
       (page indexing))))
 
 (define (build-chunks schema query tailor)  
-  (let [(entity-name (query-entity-name query))
-        (instances-per-page (tailor-instances-per-page tailor))
-        (chunk-size (tailor-chunk-size tailor))
-        (instance-size (tailor-instance-size tailor))
-        (amount-already-read (tailor-amount-already-read tailor))]
+  (let* [(entity-name (query-entity-name query))
+         (instances-per-page (tailor-instances-per-page tailor))
+         (chunk-size (tailor-chunk-size tailor))
+         (instance-size (tailor-instance-size tailor))
+         (amount-already-read (tailor-amount-already-read tailor))
+         (entity-size (table-row-size (hash-ref schema entity-name)))]
 
     (define (derive-to-read-bytes content-length amount-already-read)
-      (let [(pages-bytes (* instances-per-page instance-size default-pages-per-chunk))
-            (remaining (- content-length amount-already-read))]
+      (let* [(pages-bytes (* instances-per-page instance-size default-pages-per-chunk))
+             (remaining (- content-length amount-already-read))]
         (min pages-bytes remaining)))
     
     (define file-name (build-ndf-filename entity-name #:data? 'data))
     (define content-length (file-size file-name))
     (define reader (open-input-file file-name #:mode 'binary))
-    
+
     ;; This loops over the file using a file descriptor and amount already read
     (let loop [(amount-already-read amount-already-read)
                (current-chunk-number 0)
@@ -181,9 +181,6 @@
          (new-tailor (tailor-instance-size-set tailor instance-size))]
     (define chunks (build-chunks schema query new-tailor))
     (define tree (create-b-plus-tree chunks))
-    (println chunks)
-    ;; (print_leaves tree)
-    (print_tree tree)    
     (pager
      chunks
      tree
@@ -210,24 +207,36 @@
                     (read-bytes row-size input)))
   (read-table-values-from-disk schema table-name #:source payload))
 
+(define (update-tailor-page-size schema entity-name tailor)
+  (lookup-table-in-schema
+   schema
+   entity-name
+   (lambda (table)
+     (let* [(page-bytesize (tailor-page-bytesize tailor))
+            (entity-size (table-row-size table))
+            (page-rem (remainder page-bytesize entity-size))
+            (new-page-bytesize (- page-bytesize page-rem))
+            (chunk-size (tailor-chunk-size tailor))
+            (chunk-rem (remainder chunk-size new-page-bytesize))]
+       (~> (tailor-page-bytesize-set tailor new-page-bytesize)
+           (tailor-chunk-size-set _ (- chunk-size chunk-rem)))))))
+
 (define (search schema query)
-  (let* [(table-name (query-entity-name query))
-         (entity (hash-ref schema table-name))]
-   (cond
-      [(table? entity)
-       (let* [(entity-name (query-entity-name query))
-              (attribute-value (query-attribute-value query))
-              (pager (build-pagination schema query default-tailor))
-              (how-many-leaves-ptr (malloc _int))
-              (leaves-ptr (find_and_get_node (pager-tree pager) attribute-value how-many-leaves-ptr))
-              (how-many-leaves (ptr-ref how-many-leaves-ptr _int))
-              (leaves (convert-leaves leaves-ptr how-many-leaves))]
-         ;; (println leaves)
-         (println how-many-leaves)
-         (unless (= 0 how-many-leaves)
+  (define entity-name (query-entity-name query))
+  (lookup-table-in-schema
+   schema
+   entity-name
+   (lambda (table)
+     (let* [(attribute-value (query-attribute-value query))
+            (new-tailor (update-tailor-page-size schema entity-name default-tailor))
+            (pager (build-pagination schema query new-tailor))
+            (how-many-leaves-ptr (malloc _int))
+            (leaves-ptr (find_and_get_node (pager-tree pager) attribute-value how-many-leaves-ptr))
+            (how-many-leaves (ptr-ref how-many-leaves-ptr _int))]
+       (if (not (= 0 how-many-leaves))
            (foldl (lambda [row-id search-results]
                     (append
-                     (offset-lookup schema table-name (pager-tailor pager) row-id)
+                     (offset-lookup schema entity-name (pager-tailor pager) row-id)
                      search-results))
-                  (list) (vector->list leaves))))]
-      [else (println "Did not find the entity name")])))
+                  (list) (vector->list (convert-leaves leaves-ptr how-many-leaves)))
+           (list))))))
