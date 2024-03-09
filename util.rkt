@@ -5,6 +5,7 @@
   checked-guard
   entity-structs
   define-serializable
+  foldl-reordered
   bytes-empty?
   split-by
   take-up-to
@@ -34,6 +35,9 @@
                             (list (reverse chunk))))
        ((zero? n) (cons (reverse chunk) (chunk-by-size chunk-size elements)))
        (else (recur (sub1 n) (cons (car elements) chunk) (cdr elements))))))
+
+(define (foldl-reordered lst initial f)
+  (foldl f initial lst))
 
 (define entity-structs (make-hash (list)))
 

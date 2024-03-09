@@ -4,7 +4,7 @@
  ffi/unsafe
  struct-update
  threading
- (only-in RacketowerDB/util checked-guard build-ndf-filename split-by take-up-to chunk-by-size) 
+ (only-in RacketowerDB/util checked-guard build-ndf-filename split-by take-up-to chunk-by-size foldl-reordered) 
  (submod RacketowerDB/io reader)
  RacketowerDB/bplustree
  RacketowerDB/ast)
@@ -25,7 +25,7 @@
 (struct index [key columns row-id] #:transparent
   #:guard
   (checked-guard
-   [(key . exact-nonnegative-integer?)
+   [(key . exact-nonnegative-integer?) ;; TODO: We are only handling integer keys for now
     (columns . hash?)
     (row-id . row-id?)]
    (values key columns row-id)))
@@ -33,7 +33,7 @@
 (struct page [indexes] #:transparent
   #:guard
   (checked-guard
-   [(indexes . (listof index?))]
+   [(indexes . (listof index?))] ;; TODO: Couldn't we use a chunk of rows instead of chunks of pages of rows?
    (values indexes)))
 
 (struct tailor [page-bytesize instances-per-page chunk-size instance-size amount-already-read] #:transparent
@@ -75,7 +75,7 @@
   (checked-guard
    [(entity-name . string?)
     (attribute-to-index . string?)
-    (attribute-value . exact-nonnegative-integer?)]
+    (attribute-value . exact-nonnegative-integer?)] ;; TODO: We are only handling integer keys for now
    (values entity-name attribute-to-index attribute-value)))
 (define-struct-updaters query)
 
@@ -122,13 +122,14 @@
               (index-builder current-chunk-number page-number instance-number _))))
       (page indexing))))
 
-(define (build-chunks schema query tailor)  
-  (let* [(entity-name (query-entity-name query))
+(define (build-chunks schema query tailor)
+  (define entity-name (query-entity-name query))
+  (let* [(table (lookup-table-in-schema schema entity-name))
          (instances-per-page (tailor-instances-per-page tailor))
          (chunk-size (tailor-chunk-size tailor))
          (instance-size (tailor-instance-size tailor))
          (amount-already-read (tailor-amount-already-read tailor))
-         (entity-size (table-row-size (hash-ref schema entity-name)))]
+         (entity-size (table-row-size table))]
 
     (define (derive-to-read-bytes content-length amount-already-read)
       (let* [(pages-bytes (* instances-per-page instance-size default-pages-per-chunk))
@@ -162,37 +163,35 @@
           ;; We are done with this file bud xD
           chunks))))
 
+(define (fold-chunks chunks initial)
+  (foldl-reordered chunks initial
+     (lambda (pages tree1)
+       (foldl-reordered pages tree1
+        (lambda (page tree2)
+          (foldl-reordered (page-indexes page) tree2
+           (lambda (element tree3)
+             (let* [(key (index-key element))
+                    (row-id (index-row-id element))
+                    (chunk-number (row-id-chunk-number row-id))
+                    (page-number (row-id-page-number row-id))
+                    (slot-number (row-id-slot-number row-id))]
+               (insert tree3 key chunk-number page-number slot-number)))))))))
+
 (define (build-pagination schema query tailor)
-  (define (create-b-plus-tree chunks)
-    (foldl (lambda (pages tree1)
-             (foldl (lambda (page tree2)
-                      (foldl (lambda (element tree3)
-                               (let* [(key (index-key element))
-                                      (row-id (index-row-id element))
-                                      (chunk-number (row-id-chunk-number row-id))
-                                      (page-number (row-id-page-number row-id))
-                                      (slot-number (row-id-slot-number row-id))]
-                                 (insert tree3 key chunk-number page-number slot-number)))
-                             tree2 (page-indexes page)))
-                    tree1 pages))
-           false chunks))
-  (let* [(entity (hash-ref schema (query-entity-name query)))
-         (instance-size (table-row-size entity))
+  (define (create-b-plus-tree chunks) (fold-chunks chunks false))
+  (define entity-name (query-entity-name query))
+  (let* [(table (lookup-table-in-schema schema entity-name))
+         (instance-size (table-row-size table))
          (new-tailor (tailor-instance-size-set tailor instance-size))]
     (define chunks (build-chunks schema query new-tailor))
     (define tree (create-b-plus-tree chunks))
-    (pager
-     chunks
-     tree
-     new-tailor)))
-
-(define (convert-leaves ptr size) (ptr-ref ptr (_array/vector _RECORD-pointer size)))
+    (pager chunks tree new-tailor)))
 
 (define (derive-offset schema table-name tailor row-id-ptr)
   (define row-size (table-row-size (hash-ref schema table-name)))
   (define chunk-size (tailor-chunk-size tailor))
   (define page-size (tailor-page-bytesize tailor))
-  (define row-id-value (apply row-id (RECORD->list (ptr-ref row-id-ptr _RECORD))))
+  (define row-id-value (apply row-id (deref-row-id row-id-ptr)))
   (define chunk-number (row-id-chunk-number row-id-value))
   (define page-number (row-id-page-number row-id-value))
   (define slot-number (row-id-slot-number row-id-value))
@@ -201,42 +200,34 @@
 (define (offset-lookup schema table-name tailor row-id)
   (define-values (row-size offset) (derive-offset schema table-name tailor row-id))
   (define file-name (build-ndf-filename #:data? 'data table-name))
-  (define input (open-input-file file-name #:mode 'binary))
-  (define payload (begin
-                    (file-position input offset)
-                    (read-bytes row-size input)))
+  (define payload (call-with-input-file file-name #:mode 'binary
+                    (lambda (input)
+                      (file-position input offset)
+                      (read-bytes row-size input))))
   (read-table-values-from-disk schema table-name #:source payload))
 
 (define (update-tailor-page-size schema entity-name tailor)
-  (lookup-table-in-schema
-   schema
-   entity-name
-   (lambda (table)
-     (let* [(page-bytesize (tailor-page-bytesize tailor))
-            (entity-size (table-row-size table))
-            (page-rem (remainder page-bytesize entity-size))
-            (new-page-bytesize (- page-bytesize page-rem))
-            (chunk-size (tailor-chunk-size tailor))
-            (chunk-rem (remainder chunk-size new-page-bytesize))]
-       (~> (tailor-page-bytesize-set tailor new-page-bytesize)
-           (tailor-chunk-size-set _ (- chunk-size chunk-rem)))))))
+  (let* [(table (lookup-table-in-schema schema entity-name))
+         (page-bytesize (tailor-page-bytesize tailor))
+         (entity-size (table-row-size table))
+         (page-rem (remainder page-bytesize entity-size))
+         (new-page-bytesize (- page-bytesize page-rem))
+         (chunk-size (tailor-chunk-size tailor))
+         (chunk-rem (remainder chunk-size new-page-bytesize))]
+    (~> (tailor-page-bytesize-set tailor new-page-bytesize)
+        (tailor-chunk-size-set _ (- chunk-size chunk-rem)))))
 
 (define (search schema query)
   (define entity-name (query-entity-name query))
-  (lookup-table-in-schema
-   schema
-   entity-name
-   (lambda (table)
-     (let* [(attribute-value (query-attribute-value query))
-            (new-tailor (update-tailor-page-size schema entity-name default-tailor))
-            (pager (build-pagination schema query new-tailor))
-            (how-many-leaves-ptr (malloc _int))
-            (leaves-ptr (find_and_get_node (pager-tree pager) attribute-value how-many-leaves-ptr))
-            (how-many-leaves (ptr-ref how-many-leaves-ptr _int))]
-       (if (not (= 0 how-many-leaves))
-           (foldl (lambda [row-id search-results]
-                    (append
-                     (offset-lookup schema entity-name (pager-tailor pager) row-id)
-                     search-results))
-                  (list) (vector->list (convert-leaves leaves-ptr how-many-leaves)))
-           (list))))))
+  (let* [(table (lookup-table-in-schema schema entity-name))
+         (attribute-value (query-attribute-value query))
+         (new-tailor (update-tailor-page-size schema entity-name default-tailor))
+         (pager (build-pagination schema query new-tailor))
+         (how-many-leaves-ptr (malloc _int))
+         (leaves-ptr (find_and_get_node (pager-tree pager) attribute-value how-many-leaves-ptr))
+         (how-many-leaves (ptr-ref how-many-leaves-ptr _int))]
+    (foldl (lambda [row-id search-results]
+             (append
+              (offset-lookup schema entity-name (pager-tailor pager) row-id)
+              search-results))
+           (list) (vector->list (convert-leaves leaves-ptr how-many-leaves)))))
