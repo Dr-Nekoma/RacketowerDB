@@ -56,11 +56,22 @@
             (byte-size-value (integer-bytes->integer (subbytes byte-stream (+ 1 name-length)) #t))]
       (type name-value byte-size-value)))])
 
+(define (stringl-trim string-1)
+  (string-trim (stringl-value string-1) "\u0000" #:left? false #:repeat? #t))
+
+(define (stringl-equal string-1 string-2 recur-equal)
+  (recur-equal (stringl-trim string-1)
+               (stringl-trim string-2)))
+
 (define-serializable stringl [value] #:transparent
   #:guard
   (checked-guard
     [(value . string?)]
     value)
+   #:methods gen:equal+hash
+  [(define equal-proc stringl-equal)
+   (define hash-proc  (lambda (stringl rec-hash) (rec-hash (stringl-trim stringl))))
+   (define hash2-proc (lambda (stringl rec-hash) (rec-hash (stringl-trim stringl))))]
   #:methods gen:serializable
   [(define (serialize self #:size [size #f])
      (unless size

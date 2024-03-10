@@ -15,20 +15,11 @@
 
 (module+ test
   (require rackunit)
-  ;; Any code in this `test` submodule runs when this file is run using DrRacket
-  ;; or with `raco test`. The code here does not run when this file is
-  ;; required by another module.
-
-  (check-equal? (+ 2 2) 4))
-
-;; http://docs.racket-lang.org/guide/Module_Syntax.html#%28part._main-and-test%29
-(module+ main
-
+  
   (define field-name (field 0 (type 'VARCHAR 7)))
   (define field-editor (field 1 (type 'VARCHAR 10)))
   (define field-year (field 1 (type 'INTEGER 4)))
   (define field-age (field 2 (type 'INTEGER 4)))
-
 
   (define constraint-1
     #`(lambda [rows]
@@ -39,7 +30,7 @@
                 (let [(raw-name (car raw-field))
                       (raw-value (cdr raw-field))]
                   (if (equal? raw-name "AGE")
-                    (>= (integer32-value raw-value) 50)
+                    (<= (integer32-value raw-value) 50)
                     #t)))
               row))
           rows)))
@@ -74,81 +65,94 @@
   (define procedure-test (procedure "procedure"))
   (define schema (make-hash (list)))
 
+  (define row0
+    `(("NAME" . ,(stringl "Marinho"))
+      ("EDITOR" . ,(stringl "Kakoune"))
+      ("AGE" . ,(integer32 29))))
+  
   (define row1
     `(("NAME" . ,(stringl "Nathan"))
       ("EDITOR" . ,(stringl "Visual Studio Code"))
-      ("AGE" . ,(integer32 100))))
+      ("AGE" . ,(integer32 23))))
 
   (define row2
     `(("NAME" . ,(stringl "Lemos"))
       ("EDITOR" . ,(stringl "Emacs"))
-      ("AGE" . ,(integer32 100))))
+      ("AGE" . ,(integer32 24))))
 
   (define row3
-    `(("MODEL" . ,(stringl "Ford"))
-      ("YEAR" . ,(integer32 1996))))
+    `(("NAME" . ,(stringl "Magueta"))
+      ("EDITOR" . ,(stringl "Emacs"))
+      ("AGE" . ,(integer32 24))))
 
   (define row4
-    `(("MODEL" . ,(stringl "Abcd"))
-      ("YEAR" . ,(integer32 1999))))
+    `(("MODEL" . ,(stringl "Model X"))
+      ("YEAR" . ,(integer32 2015))))
 
   (define row5
-    `(("MODEL" . ,(stringl "asdf"))
-      ("YEAR" . ,(integer32 1996))))
+    `(("MODEL" . ,(stringl "Model S"))
+      ("YEAR" . ,(integer32 2012))))
 
   (define row6
-    `(("MODEL" . ,(stringl "jkl;"))
-      ("YEAR" . ,(integer32 1997))))
+    `(("MODEL" . ,(stringl "R1S"))
+      ("YEAR" . ,(integer32 2021))))
 
   (define row7
-    `(("MODEL" . ,(stringl "Mach 6"))
-      ("YEAR" . ,(integer32 1997))))
-  
+    `(("MODEL" . ,(stringl "Beetle"))
+      ("YEAR" . ,(integer32 1938))))
+
   (define row8
-    `(("MODEL" . ,(stringl "qwer"))
-      ("YEAR" . ,(integer32 1997))))
+    `(("MODEL" . ,(stringl "Mach 5"))
+      ("YEAR" . ,(integer32 1967))))
 
   (define row9
-    `(("MODEL" . ,(stringl "Mach 5"))
-      ("YEAR" . ,(integer32 1997))))
-
-  (define row10
-    `(("MODEL" . ,(stringl "Tesla"))
-      ("YEAR" . ,(integer32 2020))))
-
-  (define row11
-    `(("MODEL" . ,(stringl "Honda"))
-      ("YEAR" . ,(integer32 1996))))
-  
+    `(("MODEL" . ,(stringl "Mach 6"))
+      ("YEAR" . ,(integer32 1967))))
+    
   (hash-set! schema "PROGRAMMER" programmer-table)
   (hash-set! schema "CAR" car-table)
-  (set! schema (write-rows-to-disk schema "CAR" (list row3 row4 row5 row6 row7 row8 row9 row10 row11)))
-  (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
-  ;; (println (read-table-values-from-disk schema "PROGRAMMER"))
-  ;; (define-values (pages amount-already-read) (build-pages 0 1 1 (+ 7 10 4) 0 "AGE" schema "PROGRAMMER"))  
-  (println (search schema (query "PROGRAMMER" "AGE" 100)))
-  ;; (check-local-constraints programmer-table (list row1 row2))
-  ;; (hash-set! schema "TEST" procedure-test)
-  ;; (write-schema-to-disk schema)
-  ;; (set! schema (read-schema-from-disk "schema"))
-  ;; (check-local-constraints (hash-ref schema "PROGRAMMER") (list row1 row2))
-  ;; (println schema)
-  ;; (write-table-to-disk programmer-table "PROGRAMMER")
-  ;; (let ((read-table (read-table-from-disk "PROGRAMMER")))
-  ;;   (hash-set! schema "PROGRAMMER" read-table)
-  ;;   (set! schema (write-rows-to-disk schema "PROGRAMMER" (list row1 row2)))
-  ;;   (println schema))
-  ;; (tree-test)
-  )
+  (define programmer-list (list row0 row1 row2 row3))
+  (define car-list (list row4 row5 row6 row7 row8 row9))
 
-  ;;(exit-handler)
-  ;;(server-entrypoint)
+  (test-case
+      "Write mocked data into disk with PROGRAMMER table"
+    (set! schema (write-rows-to-disk schema "PROGRAMMER" programmer-list))
+    (check-equal? (table-row-id (hash-ref schema "PROGRAMMER")) 4))
+  
+  (test-case
+      "Write mocked data into disk with CAR table"
+    (set! schema (write-rows-to-disk schema "CAR" car-list))
+    (check-equal? (table-row-id (hash-ref schema "CAR")) 6))
 
-  ;;(require racket/cmdline)
-  ;;(define who (box "world"))
-  ;;(command-line
-  ;;  #:program "my-program"
-  ;;  #:once-each
-  ;;  [("-n" "--name") name "Who to say hello to" (set-box! who name)]
-  ;;  #:args ()
-  ;;  (printf "hello ~a~n" (unbox who))))
+  (test-case
+      "Read written data from disk with CAR table"
+    (check-equal? (read-table-values-from-disk schema "CAR") (map make-hash car-list)))
+
+  (test-case
+      "Check for constraints in the PROGRAMMER table"
+    (check-true (check-local-constraints (hash-ref schema "PROGRAMMER") programmer-list)))
+
+  (test-case
+      "Check writing schema into disk"
+    (write-schema-to-disk schema)
+    (check-match (read-schema-from-disk "schema") schema))
+
+  (test-case
+      "Check writing table PROGRAMMER into disk"
+    (write-table-to-disk programmer-table "PROGRAMMER")
+    (check-match (read-table-from-disk "PROGRAMMER")  programmer-table))
+  (test-case
+      "Check writing table CAR into disk"
+    (write-table-to-disk car-table "CAR")
+    (check-match (read-table-from-disk "CAR") car-table))
+
+  (test-case
+      "Query integer values from persisted PROGRAMMER table"
+    (check-equal? (search schema (query "PROGRAMMER" "AGE" 24)) (map make-hash (list row2 row3))))
+  (test-case
+      "Query integer values from persisted CAR table"
+    (check-equal? (search schema (query "CAR" "YEAR" 1967)) (map make-hash (list row8 row9)))))
+
+(module+ main
+  (println "Welcome to RacketowerDB!")
+  (println "TODO: Server yet to be implemented xD"))

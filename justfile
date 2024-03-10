@@ -23,4 +23,4 @@ docs NAME:
 	raco docs {{ NAME }}
 
 test:
-	raco test
+	raco test main.rkt
