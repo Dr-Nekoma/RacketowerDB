@@ -51,4 +51,4 @@ TODO
 
 * Dr.Nekoma
 
-Built live on [[https://www.twitch.tv/drnekoma][Twitch]] and archived on [[https://www.youtube.com/channel/UCMyzdYsPiBU3xoqaOeahr6Q)][Youtube]].
+Built live on [[https://www.twitch.tv/drnekoma][Twitch]] and archived on [[https://youtube.com/playlist?list=PLafNlGaxdt65iwFNDtAG-WXsoRoi-ZJmx&si=he3YkzRNaUHYsyOr][Youtube]].
