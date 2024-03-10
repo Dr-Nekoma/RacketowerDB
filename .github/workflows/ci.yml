@@ -26,3 +26,5 @@ jobs:
         run: raco pkg install --auto --batch
       - name: Check compilation
         run: raco exe --gui main.rkt
+      - name: Check test
+        run: raco test main.rkt
