@@ -34,8 +34,8 @@
          (case (type-name self)
            [[INTEGER] (integer32 (integer-bytes->integer byte-stream #t))]
            [[VARCHAR] (stringl (bytes->string/utf-8 byte-stream))]
-           [else (raise 'error-with-unknown-type-from-bytes)])
-         (raise 'error-with-from-bytes-size-check))))
+           [else (error "Unknown type. Supported types: INTEGER and VARCHAR")])
+         (error "Unmatch between type byte size and bytes from byte stream"))))
    (define (to-byte-size self)
      (type-byte-size self))]
   #:methods gen:serializable
@@ -147,7 +147,7 @@
     (cond
       [(table? entity) entity]
       [(procedure? entity)
-       (error "Don't write procedures yet")])))
+       (error (format "Found procedure ~s instead of a table" table-name))])))
 
 (define (table-column-value table table-name column-name)
   (define (column-name-message column-name)
@@ -190,7 +190,7 @@
            (bytes-append constraint-size serialized-constraint)))
        (define constraints-count (length constraint-list))
        (unless (<= constraints-count #xff)
-         (raise 'using-more-constraints-than-supported))
+         (error "Using more than supported constraints (max 255"))
        (let [(serialized-count (integer->integer-bytes constraints-count 1 #f))
              (serialized-constraints (bytes-join (map serialize-constraint constraint-list) #""))]
          (bytes-append serialized-count serialized-constraints)))
