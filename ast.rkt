@@ -190,7 +190,7 @@
            (bytes-append constraint-size serialized-constraint)))
        (define constraints-count (length constraint-list))
        (unless (<= constraints-count #xff)
-         (error "Using more than supported constraints (max 255"))
+         (error "Using more than supported constraints (max 255)"))
        (let [(serialized-count (integer->integer-bytes constraints-count 1 #f))
              (serialized-constraints (bytes-join (map serialize-constraint constraint-list) #""))]
          (bytes-append serialized-count serialized-constraints)))
