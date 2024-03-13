@@ -5,7 +5,11 @@
   checked-guard
   entity-structs
   define-serializable
-  bytes-empty?)
+  foldl-reordered
+  bytes-empty?
+  split-by
+  take-up-to
+  chunk-by-size)
 
 (require
   (for-syntax threading racket/syntax racket/list)
@@ -20,6 +24,20 @@
                 [('data) "ndf/data/"]
                 [else (raise 'error-not-specified-datatype)]))]
     (string-append path (string-append name ".ndf"))))
+
+(define (chunk-by-size chunk-size elements)
+    (let recur [(n chunk-size)
+                (chunk '())
+                (elements elements)]
+      (cond
+       ((empty? elements) (if (empty? chunk)
+                            '()
+                            (list (reverse chunk))))
+       ((zero? n) (cons (reverse chunk) (chunk-by-size chunk-size elements)))
+       (else (recur (sub1 n) (cons (car elements) chunk) (cdr elements))))))
+
+(define (foldl-reordered lst initial f)
+  (foldl f initial lst))
 
 (define entity-structs (make-hash (list)))
 
@@ -56,6 +74,17 @@
 
 (define (bytes-empty? byte-stream)
   (equal? #"" byte-stream))
+
+(define (split-by lst n)
+   (if (not (empty? lst))
+       (cons (take lst n) (split-by (drop lst n) n))
+       '()))
+
+(define (take-up-to l n)
+  (let [(size (length l))]
+    (if (> size n)
+        (take l n)
+        (take l size))))
 
 (module interfaces racket
   (provide

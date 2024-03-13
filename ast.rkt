@@ -4,6 +4,9 @@
   check-local-constraints
   (struct+updaters-out table)
   fields-size
+  table-row-size
+  extract-value
+  lookup-table-in-schema
   (struct+updaters-out procedure)
   (struct+updaters-out field)
   (struct+updaters-out integer32)
@@ -85,6 +88,10 @@
    (define (deserialize _self byte-stream)
      (integer32 (integer-bytes->integer (subbytes byte-stream 0 4) #t)))])
 
+(define (field-size field)
+  (let [(type (field-type field))]
+    (type-byte-size type)))
+
 (define-serializable field [position type] #:transparent
   #:guard
   (checked-guard
@@ -119,6 +126,33 @@
     (andmap (lambda [constraint]
               ((eval-syntax constraint) rows))
       constraints)))
+
+(define (table-row-size table)
+  (let [(fields (hash-values (table-fields table)))]
+    (foldl (lambda (field acc) (+ acc (field-size field))) 0 fields)))
+
+(define (lookup-table-in-schema schema table-name)
+  (let [(entity (hash-ref schema table-name))]
+    (cond
+      [(table? entity) entity]
+      [(procedure? entity)
+       (error "Don't write procedures yet")])))
+
+(define (table-column-value table table-name column-name)
+  (define (column-name-message column-name)
+      (error (format "Could not find column ~s in table fields of table ~s" column-name table-name)))
+
+  (let* [(column-field (hash-ref (table-fields table) column-name (lambda () (column-name-message column-name))))
+         (field-type (field-type column-field))
+         (name (type-name field-type))]
+    (case name
+      [[INTEGER] integer32-value]
+      [[VARCHAR] (error "TODO: We only support integers for now and you asked for a string bud xD")]
+      [else (error (format "Could not find type ~a in table's fields: ~a" name (table-fields table)))])))
+
+(define (extract-value schema table-name column-name)
+  (~> (lookup-table-in-schema schema table-name)
+      (table-column-value _ table-name column-name)))
 
 (define-serializable table
   [identifier row-id fields local-constraints] #:transparent
