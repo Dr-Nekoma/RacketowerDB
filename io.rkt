@@ -43,8 +43,7 @@
         (lambda [out]
           (file-position out off-set)
           (write-bytes converted-row out)))
-      (set! schema (update-row-id-table schema table-name (+ row-id 1)))
-      schema))
+      (update-row-id-table schema table-name (+ row-id 1))))
 
   (define (write-rows-to-disk schema table-name rows)
     (if (empty? rows)
