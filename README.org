@@ -9,7 +9,7 @@ Do not use it professionally (it's always good to warn).
 
 * RoadMap
 
-** RacketowerDB 1.0 [3/6]
+** RacketowerDB 1.0 [6/6]
  - [X] Write the logical schema onto disk
  - [X] Reads of tables and schemas
  - [X] Persistent storage
