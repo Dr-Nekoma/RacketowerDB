@@ -165,17 +165,17 @@
 
 (define (fold-chunks chunks initial)
   (foldl-reordered chunks initial
-     (lambda (pages tree1)
-       (foldl-reordered pages tree1
+    (lambda (pages tree1)
+      (foldl-reordered pages tree1
         (lambda (page tree2)
           (foldl-reordered (page-indexes page) tree2
-           (lambda (element tree3)
-             (let* [(key (index-key element))
-                    (row-id (index-row-id element))
-                    (chunk-number (row-id-chunk-number row-id))
-                    (page-number (row-id-page-number row-id))
-                    (slot-number (row-id-slot-number row-id))]
-               (insert tree3 key chunk-number page-number slot-number)))))))))
+            (lambda (element tree3)
+              (let* [(key (index-key element))
+                     (row-id (index-row-id element))
+                     (chunk-number (row-id-chunk-number row-id))
+                     (page-number (row-id-page-number row-id))
+                     (slot-number (row-id-slot-number row-id))]
+                (insert tree3 key chunk-number page-number slot-number)))))))))
 
 (define (build-pagination schema query tailor)
   (define (create-b-plus-tree chunks) (fold-chunks chunks false))
