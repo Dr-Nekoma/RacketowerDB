@@ -22,5 +22,5 @@ uninstall NAME:
 docs NAME:
 	raco docs {{ NAME }}
 
-test:
-	raco test
+test: bplustree
+	raco test main.rkt

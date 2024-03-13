@@ -22,7 +22,7 @@
                 [('entity) "ndf/entities/"]
                 [('schema) "ndf/schemas/"]
                 [('data) "ndf/data/"]
-                [else (raise 'error-not-specified-datatype)]))]
+                [else (error (format "Unknown data type for filename creation: ~a" data?))]))]
     (string-append path (string-append name ".ndf"))))
 
 (define (chunk-by-size chunk-size elements)
